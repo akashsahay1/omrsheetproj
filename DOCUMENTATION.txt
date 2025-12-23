@@ -434,7 +434,7 @@ When reporting issues, please include:
 ================================================================================
 
 Document Version: 1.0
-Last Updated: December 2024
+Last Updated: December 2025
 Application: Vidya Bharti Pratibha Khoj and Pratibha Chayan OMR Scanner v1.0.0
 
 Developed by: Avenux Techspire (OPC) PVT LTD
