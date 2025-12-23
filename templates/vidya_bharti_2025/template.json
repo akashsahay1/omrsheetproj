@@ -1,0 +1,384 @@
+{
+  "templateName": "Vidya Bharti Pratibha Khoj 2025-26",
+  "description": "OMR Answer Sheet for Vidya Bharti Pratibha Khoj and Pratibha Chayan Examination",
+  "pageDimensions": [
+    2480,
+    3507
+  ],
+  "bubbleDimensions": [
+    28,
+    28
+  ],
+  "emptyValue": "",
+  "multiMarkValue": "MULTI",
+  "preProcessors": [
+    {
+      "name": "AutoRotate",
+      "options": {
+        "enabled": true
+      }
+    }
+  ],
+  "fieldBlocks": {
+    "CandidateName": {
+      "description": "Candidate name in block letters (25 characters max)",
+      "fieldType": "QTYPE_ALPHA",
+      "origin": [
+        186,
+        477
+      ],
+      "fieldLabels": [
+        "Name_1",
+        "Name_2",
+        "Name_3",
+        "Name_4",
+        "Name_5",
+        "Name_6",
+        "Name_7",
+        "Name_8",
+        "Name_9",
+        "Name_10",
+        "Name_11",
+        "Name_12",
+        "Name_13",
+        "Name_14",
+        "Name_15",
+        "Name_16",
+        "Name_17",
+        "Name_18",
+        "Name_19",
+        "Name_20",
+        "Name_21",
+        "Name_22",
+        "Name_23",
+        "Name_24",
+        "Name_25"
+      ],
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T",
+        "U",
+        "V",
+        "W",
+        "X",
+        "Y",
+        "Z"
+      ],
+      "bubblesGap": 28,
+      "labelsGap": 21,
+      "direction": "vertical"
+    },
+    "RollNumber": {
+      "description": "3-digit roll number",
+      "fieldType": "QTYPE_INT",
+      "origin": [
+        1624,
+        1278
+      ],
+      "fieldLabels": [
+        "Roll_D1",
+        "Roll_D2",
+        "Roll_D3"
+      ],
+      "bubbleValues": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ],
+      "bubblesGap": 54,
+      "labelsGap": 56,
+      "direction": "vertical"
+    },
+    "Class": {
+      "description": "Class (0-9)",
+      "fieldType": "QTYPE_INT",
+      "origin": [
+        1792,
+        1278
+      ],
+      "fieldLabels": [
+        "Class"
+      ],
+      "bubbleValues": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ],
+      "bubblesGap": 54,
+      "labelsGap": 56,
+      "direction": "vertical"
+    },
+    "Section": {
+      "description": "Section (A-H)",
+      "fieldType": "QTYPE_ALPHA",
+      "origin": [
+        1848,
+        1278
+      ],
+      "fieldLabels": [
+        "Section"
+      ],
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "bubblesGap": 54,
+      "labelsGap": 56,
+      "direction": "vertical"
+    },
+    "SchoolCode": {
+      "description": "4-digit school code",
+      "fieldType": "QTYPE_INT",
+      "origin": [
+        1904,
+        1278
+      ],
+      "fieldLabels": [
+        "School_D1",
+        "School_D2",
+        "School_D3",
+        "School_D4"
+      ],
+      "bubbleValues": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ],
+      "bubblesGap": 54,
+      "labelsGap": 56,
+      "direction": "vertical"
+    },
+    "Answers_1_10": {
+      "description": "Questions 1-10",
+      "fieldType": "QTYPE_MCQ4",
+      "origin": [
+        167,
+        1656
+      ],
+      "fieldLabels": [
+        "q1",
+        "q2",
+        "q3",
+        "q4",
+        "q5",
+        "q6",
+        "q7",
+        "q8",
+        "q9",
+        "q10"
+      ],
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "bubblesGap": 54,
+      "labelsGap": 70,
+      "direction": "horizontal"
+    },
+    "Answers_11_20": {
+      "description": "Questions 11-20",
+      "fieldType": "QTYPE_MCQ4",
+      "origin": [
+        557,
+        1656
+      ],
+      "fieldLabels": [
+        "q11",
+        "q12",
+        "q13",
+        "q14",
+        "q15",
+        "q16",
+        "q17",
+        "q18",
+        "q19",
+        "q20"
+      ],
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "bubblesGap": 54,
+      "labelsGap": 70,
+      "direction": "horizontal"
+    },
+    "Answers_21_30": {
+      "description": "Questions 21-30",
+      "fieldType": "QTYPE_MCQ4",
+      "origin": [
+        947,
+        1656
+      ],
+      "fieldLabels": [
+        "q21",
+        "q22",
+        "q23",
+        "q24",
+        "q25",
+        "q26",
+        "q27",
+        "q28",
+        "q29",
+        "q30"
+      ],
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "bubblesGap": 54,
+      "labelsGap": 70,
+      "direction": "horizontal"
+    },
+    "Answers_31_40": {
+      "description": "Questions 31-40",
+      "fieldType": "QTYPE_MCQ4",
+      "origin": [
+        1337,
+        1656
+      ],
+      "fieldLabels": [
+        "q31",
+        "q32",
+        "q33",
+        "q34",
+        "q35",
+        "q36",
+        "q37",
+        "q38",
+        "q39",
+        "q40"
+      ],
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "bubblesGap": 54,
+      "labelsGap": 70,
+      "direction": "horizontal"
+    },
+    "Answers_41_50": {
+      "description": "Questions 41-50",
+      "fieldType": "QTYPE_MCQ4",
+      "origin": [
+        1727,
+        1656
+      ],
+      "fieldLabels": [
+        "q41",
+        "q42",
+        "q43",
+        "q44",
+        "q45",
+        "q46",
+        "q47",
+        "q48",
+        "q49",
+        "q50"
+      ],
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "bubblesGap": 54,
+      "labelsGap": 70,
+      "direction": "horizontal"
+    },
+    "Answers_51_60": {
+      "description": "Questions 51-60",
+      "fieldType": "QTYPE_MCQ4",
+      "origin": [
+        2117,
+        1656
+      ],
+      "fieldLabels": [
+        "q51",
+        "q52",
+        "q53",
+        "q54",
+        "q55",
+        "q56",
+        "q57",
+        "q58",
+        "q59",
+        "q60"
+      ],
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "bubblesGap": 54,
+      "labelsGap": 70,
+      "direction": "horizontal"
+    }
+  },
+  "outputColumns": [
+    "Name",
+    "RollNumber",
+    "Class",
+    "Section",
+    "SchoolCode"
+  ],
+  "scoringRules": {
+    "correct": 1.0,
+    "wrong": -0.25,
+    "unanswered": 0.0,
+    "multiMarked": -0.25
+  }
+}

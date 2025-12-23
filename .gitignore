@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Build
+build/
+dist/
+*.spec
+
+# Debug/temp files
+debug_*.py
+find_*.py
+check_*.py
+measure_*.py
+calibrate*.py
+crop_*.py
+locate_*.py
+full_scan.py
+compare_sheets.py
+detect_bubbles.py
+visualize_*.py
+save_*.py
+scan_*.py
+
+# Debug images
+debug_*.png
+*.pyc
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+nul
+
+# Data
+data/
+exports/

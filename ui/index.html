@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMR Processor - Vidya Bharti Pratibha Khoj 2025-26</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Sidebar Navigation -->
+        <nav id="sidebar">
+            <div class="sidebar-header">
+                <h2>OMR Processor</h2>
+                <p class="version">v1.0.0</p>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item active" data-page="dashboard">
+                    <span class="nav-icon">&#127968;</span>
+                    <span>Dashboard</span>
+                </li>
+                <li class="nav-item" data-page="process">
+                    <span class="nav-icon">&#9881;</span>
+                    <span>Process Sheets</span>
+                </li>
+                <li class="nav-item" data-page="results">
+                    <span class="nav-icon">&#128202;</span>
+                    <span>Results</span>
+                </li>
+                <li class="nav-item" data-page="answer-key">
+                    <span class="nav-icon">&#128221;</span>
+                    <span>Answer Key</span>
+                </li>
+                <li class="nav-item" data-page="settings">
+                    <span class="nav-icon">&#9881;</span>
+                    <span>Settings</span>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main id="content">
+            <!-- Dashboard Page -->
+            <section id="page-dashboard" class="page active">
+                <div class="page-header">
+                    <h1>Welcome to OMR Processor</h1>
+                    <p>Vidya Bharti Pratibha Khoj / Pratibha Chayan 2025-26</p>
+                </div>
+                <div class="dashboard-cards">
+                    <div class="card action-card" onclick="navigateTo('process')">
+                        <div class="card-icon">&#128196;</div>
+                        <h3>Process New Batch</h3>
+                        <p>Process multiple OMR sheets at once</p>
+                    </div>
+                    <div class="card action-card" onclick="navigateTo('results')">
+                        <div class="card-icon">&#128202;</div>
+                        <h3>View Results</h3>
+                        <p>View and export processed results</p>
+                    </div>
+                    <div class="card action-card" onclick="navigateTo('answer-key')">
+                        <div class="card-icon">&#128221;</div>
+                        <h3>Answer Key</h3>
+                        <p>Configure answer key for scoring</p>
+                    </div>
+                </div>
+                <div class="info-section">
+                    <h3>Quick Start Guide</h3>
+                    <ol>
+                        <li>Set up your Answer Key (required for scoring)</li>
+                        <li>Select a folder containing scanned OMR sheets</li>
+                        <li>Start processing and monitor progress</li>
+                        <li>Export results to Excel</li>
+                    </ol>
+                </div>
+            </section>
+
+            <!-- Process Page -->
+            <section id="page-process" class="page">
+                <div class="page-header">
+                    <h1>Process OMR Sheets</h1>
+                </div>
+
+                <div class="process-form">
+                    <!-- Input Folder -->
+                    <div class="form-group">
+                        <label>Input Folder</label>
+                        <div class="input-with-button">
+                            <input type="text" id="input-folder" readonly placeholder="Select folder with OMR images...">
+                            <button class="btn btn-secondary" onclick="selectInputFolder()">Browse</button>
+                        </div>
+                        <span class="file-count" id="file-count"></span>
+                    </div>
+
+                    <!-- Output File -->
+                    <div class="form-group">
+                        <label>Output File (Optional)</label>
+                        <div class="input-with-button">
+                            <input type="text" id="output-file" readonly placeholder="Excel output path...">
+                            <button class="btn btn-secondary" onclick="selectOutputFile()">Browse</button>
+                        </div>
+                    </div>
+
+                    <!-- Options -->
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="with-scoring" checked>
+                            Enable Scoring (requires answer key)
+                        </label>
+                    </div>
+
+                    <!-- Answer Key Status -->
+                    <div class="form-group">
+                        <label>Answer Key Status</label>
+                        <div id="answer-key-status" class="status-box warning">
+                            No answer key loaded
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="form-actions">
+                        <button class="btn btn-primary btn-large" id="btn-start" onclick="startProcessing()">
+                            Start Processing
+                        </button>
+                        <button class="btn btn-danger" id="btn-cancel" onclick="cancelProcessing()" disabled>
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Progress Section -->
+                <div id="progress-section" class="progress-section hidden">
+                    <h3>Processing Progress</h3>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progress-bar"></div>
+                        <span class="progress-text" id="progress-text">0%</span>
+                    </div>
+                    <div class="progress-details">
+                        <p id="progress-status">Waiting to start...</p>
+                        <p id="progress-file">Current file: -</p>
+                        <p id="progress-count">Processed: 0 / 0</p>
+                        <p id="progress-time">Elapsed: 0s | Remaining: -</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Page -->
+            <section id="page-results" class="page">
+                <div class="page-header">
+                    <h1>Results</h1>
+                    <div class="page-actions">
+                        <button class="btn btn-primary" onclick="exportResults()">Export to Excel</button>
+                    </div>
+                </div>
+
+                <div id="results-stats" class="stats-bar hidden">
+                    <div class="stat-item">
+                        <span class="stat-value" id="stat-total">0</span>
+                        <span class="stat-label">Total</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="stat-avg">0</span>
+                        <span class="stat-label">Avg Score</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="stat-high">0</span>
+                        <span class="stat-label">Highest</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="stat-low">0</span>
+                        <span class="stat-label">Lowest</span>
+                    </div>
+                </div>
+
+                <div id="results-empty" class="empty-state">
+                    <p>No results available yet.</p>
+                    <p>Process some OMR sheets to see results here.</p>
+                </div>
+
+                <div id="results-table-container" class="table-container hidden">
+                    <table class="data-table" id="results-table">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Name</th>
+                                <th>Roll No.</th>
+                                <th>Class</th>
+                                <th>Section</th>
+                                <th>School Code</th>
+                                <th>Correct</th>
+                                <th>Wrong</th>
+                                <th>Score</th>
+                                <th>%</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-body">
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Answer Key Page -->
+            <section id="page-answer-key" class="page">
+                <div class="page-header">
+                    <h1>Answer Key</h1>
+                    <div class="page-actions">
+                        <button class="btn btn-secondary" onclick="loadAnswerKeyFile()">Import from File</button>
+                        <button class="btn btn-primary" onclick="saveAnswerKey()">Save Answer Key</button>
+                    </div>
+                </div>
+
+                <div class="answer-key-grid" id="answer-key-grid">
+                    <!-- Grid will be populated by JS -->
+                </div>
+
+                <div class="answer-key-summary">
+                    <p>Filled: <span id="ak-filled">0</span> / 60</p>
+                </div>
+            </section>
+
+            <!-- Settings Page -->
+            <section id="page-settings" class="page">
+                <div class="page-header">
+                    <h1>Settings</h1>
+                </div>
+
+                <div class="settings-form">
+                    <h3>Scoring Configuration</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Correct Answer Marks</label>
+                            <input type="number" id="setting-correct" value="1" step="0.25">
+                        </div>
+                        <div class="form-group">
+                            <label>Wrong Answer Marks</label>
+                            <input type="number" id="setting-wrong" value="-0.25" step="0.25">
+                        </div>
+                        <div class="form-group">
+                            <label>Unanswered Marks</label>
+                            <input type="number" id="setting-unanswered" value="0" step="0.25">
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+                    </div>
+                </div>
+
+                <div class="about-section">
+                    <h3>About</h3>
+                    <p><strong>OMR Processor</strong> v1.0.0</p>
+                    <p>Vidya Bharti Pratibha Khoj / Pratibha Chayan 2025-26</p>
+                    <p>Automated OMR Answer Sheet Processing Application</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal for Detail View -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Candidate Details</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Content populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

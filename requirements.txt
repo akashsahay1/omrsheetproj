@@ -1,0 +1,19 @@
+# OMR Processor - Vidya Bharti Pratibha Khoj 2025-26
+# Python Dependencies
+
+# Image Processing
+opencv-python>=4.8.0
+numpy>=1.25.0
+Pillow>=10.0.0
+
+# GUI Framework
+pywebview>=4.4.0
+
+# Excel Export
+openpyxl>=3.1.0
+
+# Configuration & Validation
+jsonschema>=4.17.0
+
+# Packaging (development only)
+pyinstaller>=6.0.0

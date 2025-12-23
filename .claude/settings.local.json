@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "Bash(dir /s /b)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebSearch",
+      "Bash(dir:*)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:pywebview.flowrl.com)",
+      "Bash(venvScriptspip install --upgrade pip)",
+      "Bash(venvScriptspip install:*)",
+      "Bash(cmd /c \"cd /d F:\\\\Projects\\\\omrsheetproj && venv\\\\Scripts\\\\pip.exe install opencv-python numpy pywebview openpyxl Pillow jsonschema\")",
+      "Bash(cmd /c \"F:\\\\Projects\\\\omrsheetproj\\\\venv\\\\Scripts\\\\python.exe -c \"\"import sys; print\\(sys.executable\\)\"\"\")",
+      "Bash(powershell -Command:*)",
+      "Bash(cmd /c \"cd /d F:\\\\Projects\\\\omrsheetproj && venv\\\\Scripts\\\\python.exe check_coordinates.py\")",
+      "Bash(cmd /c \"cd /d F:\\\\Projects\\\\omrsheetproj && venv\\\\Scripts\\\\python.exe test_extraction.py\")"
+    ]
+  }
+}
