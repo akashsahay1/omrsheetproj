@@ -47,3 +47,10 @@ nul
 # Data
 data/
 exports/
+
+# OMRChecker outputs
+OMRChecker/outputs/
+OMRChecker/inputs/_temp_processing/
+
+# Temp files
+/tmp/

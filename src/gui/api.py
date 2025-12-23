@@ -7,7 +7,7 @@ import webview
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
-from src.core.omr_engine import OMREngine
+from src.core.omrchecker_engine import OMRCheckerEngine as OMREngine
 from src.services.batch_processor import BatchProcessor, ProcessingProgress
 from src.services.scorer import Scorer
 from src.services.excel_exporter import ExcelExporter

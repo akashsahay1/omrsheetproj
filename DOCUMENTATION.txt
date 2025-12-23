@@ -1,0 +1,442 @@
+================================================================================
+    VIDYA BHARTI PRATIBHA KHOJ AND PRATIBHA CHAYAN OMR SCANNER
+                        VERSION 1.0.0
+================================================================================
+
+                        USER & BUILD DOCUMENTATION
+
+================================================================================
+                            TABLE OF CONTENTS
+================================================================================
+
+1. INTRODUCTION
+2. SYSTEM REQUIREMENTS
+3. BUILDING THE APPLICATION
+   3.1 Prerequisites
+   3.2 Building for macOS (.app / .dmg)
+   3.3 Building for Windows (.exe)
+4. USING THE APPLICATION
+   4.1 Getting Started
+   4.2 Dashboard
+   4.3 Setting Up Answer Key
+   4.4 Processing OMR Sheets
+   4.5 Viewing Results
+   4.6 Exporting Results
+   4.7 Settings
+5. OMR SHEET SPECIFICATIONS
+6. TROUBLESHOOTING
+7. SUPPORT
+
+================================================================================
+                            1. INTRODUCTION
+================================================================================
+
+VB OMR Scanner is an automated Optical Mark Recognition (OMR) application
+designed specifically for processing Vidya Bharti Pratibha Khoj and Pratibha
+Chayan examination answer sheets.
+
+Features:
+- Batch processing of scanned OMR sheets
+- Automatic detection of:
+  * Candidate Name (25 characters)
+  * Roll Number (3 digits)
+  * Class (3-10)
+  * Section (A-H)
+  * School Code (4 digits)
+  * 60 Multiple Choice Questions (A, B, C, D)
+- Configurable scoring system
+- Excel export functionality
+- Results ranking and statistics
+
+================================================================================
+                        2. SYSTEM REQUIREMENTS
+================================================================================
+
+MINIMUM REQUIREMENTS:
+---------------------
+- Operating System: macOS 10.13+ or Windows 10+
+- RAM: 4 GB (8 GB recommended)
+- Storage: 500 MB free space
+- Display: 1280 x 720 resolution
+
+FOR BUILDING FROM SOURCE:
+-------------------------
+- Python 3.9 or higher
+- pip (Python package manager)
+- 2 GB additional storage for build dependencies
+
+================================================================================
+                    3. BUILDING THE APPLICATION
+================================================================================
+
+--------------------------------------------------------------------------------
+3.1 PREREQUISITES
+--------------------------------------------------------------------------------
+
+1. Install Python 3.9 or higher from https://python.org
+
+2. Clone or download the project source code
+
+3. Open Terminal (macOS) or Command Prompt (Windows)
+
+4. Navigate to the project directory:
+
+   cd /path/to/omrsheetproj
+
+5. Create and activate a virtual environment:
+
+   macOS/Linux:
+   ------------
+   python3 -m venv venv
+   source venv/bin/activate
+
+   Windows:
+   --------
+   python -m venv venv
+   venv\Scripts\activate
+
+6. Install dependencies:
+
+   pip install --upgrade pip
+   pip install opencv-python numpy pywebview openpyxl Pillow jsonschema pyinstaller
+
+--------------------------------------------------------------------------------
+3.2 BUILDING FOR macOS (.app / .dmg)
+--------------------------------------------------------------------------------
+
+METHOD 1: Using Build Script (Recommended)
+------------------------------------------
+
+1. Make the build script executable:
+   chmod +x scripts/build_mac.sh
+
+2. Run the build script:
+   ./scripts/build_mac.sh
+
+3. The application will be created at:
+   dist/VB OMR Scanner.app
+
+METHOD 2: Manual Build
+----------------------
+
+1. Activate the virtual environment:
+   source venv/bin/activate
+
+2. Run PyInstaller:
+   pyinstaller build.spec --clean
+
+3. The application will be created at:
+   dist/VB OMR Scanner.app
+
+CREATING A DMG FILE:
+--------------------
+
+1. After building the .app, create a DMG:
+
+   hdiutil create -volname "VB OMR Scanner" \
+                  -srcfolder "dist/VB OMR Scanner.app" \
+                  -ov -format UDZO \
+                  "dist/VB_OMR_Scanner.dmg"
+
+2. The DMG file will be created at:
+   dist/VB_OMR_Scanner.dmg
+
+--------------------------------------------------------------------------------
+3.3 BUILDING FOR WINDOWS (.exe)
+--------------------------------------------------------------------------------
+
+METHOD 1: Using Build Script (Recommended)
+------------------------------------------
+
+1. Open Command Prompt as Administrator
+
+2. Navigate to the project directory:
+   cd C:\path\to\omrsheetproj
+
+3. Run the build script:
+   scripts\build_windows.bat
+
+4. The executable will be created at:
+   dist\VB OMR Scanner.exe
+
+METHOD 2: Manual Build
+----------------------
+
+1. Activate the virtual environment:
+   venv\Scripts\activate
+
+2. Run PyInstaller:
+   pyinstaller build.spec --clean
+
+3. The executable will be created at:
+   dist\VB OMR Scanner.exe
+
+================================================================================
+                        4. USING THE APPLICATION
+================================================================================
+
+--------------------------------------------------------------------------------
+4.1 GETTING STARTED
+--------------------------------------------------------------------------------
+
+1. Launch the application:
+   - macOS: Double-click "VB OMR Scanner.app"
+   - Windows: Double-click "VB OMR Scanner.exe"
+
+2. The application will open with the Dashboard view
+
+3. Before processing sheets, you must set up an Answer Key
+
+--------------------------------------------------------------------------------
+4.2 DASHBOARD
+--------------------------------------------------------------------------------
+
+The Dashboard provides quick access to main features:
+
+- PROCESS NEW BATCH: Start processing OMR sheets
+- VIEW RESULTS: View processed results and statistics
+- ANSWER KEY: Configure the correct answers for scoring
+
+Quick Start Guide:
+1. Set up your Answer Key (required for scoring)
+2. Select a folder containing scanned OMR sheets
+3. Start processing and monitor progress
+4. Export results to Excel
+
+--------------------------------------------------------------------------------
+4.3 SETTING UP ANSWER KEY
+--------------------------------------------------------------------------------
+
+1. Click "Answer Key" in the sidebar or dashboard
+
+2. For each question (1-60), select the correct answer (A, B, C, or D)
+   - Click on the option button to select it
+   - The selected answer will be highlighted
+
+3. The counter shows how many questions have been answered
+   (e.g., "Filled: 45 / 60")
+
+4. Click "Save Answer Key" to save your configuration
+
+IMPORTING ANSWER KEY FROM FILE:
+-------------------------------
+1. Click "Import from File"
+2. Select a text file with answers in format:
+   1,A
+   2,B
+   3,C
+   ... (one question per line)
+
+--------------------------------------------------------------------------------
+4.4 PROCESSING OMR SHEETS
+--------------------------------------------------------------------------------
+
+1. Click "Process Sheets" in the sidebar
+
+2. INPUT FOLDER:
+   - Click "Browse" next to Input Folder
+   - Select the folder containing scanned OMR sheet images
+   - Supported formats: JPG, JPEG, PNG, TIFF, BMP
+   - The file count will be displayed
+
+3. OUTPUT FILE (Optional):
+   - Click "Browse" next to Output File
+   - Choose where to save the Excel results
+   - If not specified, results will be saved in the input folder
+
+4. SCORING:
+   - Check "Enable Scoring" to calculate marks (requires answer key)
+   - Uncheck to only extract data without scoring
+
+5. Click "START PROCESSING"
+
+6. Monitor progress:
+   - Progress bar shows completion percentage
+   - Current file being processed
+   - Processed count (e.g., "15 / 50")
+   - Elapsed time and estimated remaining time
+
+7. Click "Cancel" to stop processing at any time
+
+RECOMMENDED SCAN SETTINGS:
+--------------------------
+- Resolution: 300 DPI
+- Color: Grayscale or Color
+- Format: JPEG or PNG
+- Orientation: Portrait (correct side up)
+
+--------------------------------------------------------------------------------
+4.5 VIEWING RESULTS
+--------------------------------------------------------------------------------
+
+1. Click "Results" in the sidebar
+
+2. STATISTICS BAR shows:
+   - Total: Number of processed sheets
+   - Avg Score: Average score across all sheets
+   - Highest: Highest score achieved
+   - Lowest: Lowest score achieved
+
+3. RESULTS TABLE displays:
+   - Rank: Position based on score
+   - Name: Detected candidate name
+   - Roll No.: Detected roll number
+   - Class: Detected class (3-10)
+   - Section: Detected section (A-H)
+   - School Code: Detected school code
+   - Correct: Number of correct answers
+   - Wrong: Number of wrong answers
+   - Score: Calculated score
+   - %: Percentage score
+
+4. Click on any row to view detailed information about that candidate
+
+--------------------------------------------------------------------------------
+4.6 EXPORTING RESULTS
+--------------------------------------------------------------------------------
+
+1. Go to "Results" page
+
+2. Click "Export to Excel" button
+
+3. Choose the save location and filename
+
+4. The Excel file will contain:
+   - Sheet 1: Complete results with all data
+   - All candidate information
+   - Individual question responses
+   - Scores and rankings
+
+--------------------------------------------------------------------------------
+4.7 SETTINGS
+--------------------------------------------------------------------------------
+
+1. Click "Settings" in the sidebar
+
+2. SCORING CONFIGURATION:
+
+   - Correct Answer Marks: Points for each correct answer
+     Default: 1.0
+
+   - Wrong Answer Marks: Points deducted for wrong answers
+     Default: -0.25 (negative marking)
+
+   - Unanswered Marks: Points for unanswered questions
+     Default: 0
+
+3. Click "Save Settings" to apply changes
+
+================================================================================
+                    5. OMR SHEET SPECIFICATIONS
+================================================================================
+
+The application is configured for Vidya Bharti examination OMR sheets with:
+
+PAGE DIMENSIONS:
+- Width: 2480 pixels (at 300 DPI)
+- Height: 3507 pixels (at 300 DPI)
+
+FIELDS DETECTED:
+----------------
+
+1. CANDIDATE NAME
+   - Location: Top-left area
+   - Format: 25 columns x 26 rows (A-Z)
+   - Bubble size: 20 x 20 pixels
+
+2. ROLL NUMBER
+   - Location: Top-right area
+   - Format: 3 digits (0-9 each)
+   - Direction: Vertical bubbles
+
+3. CLASS
+   - Location: Top-right area (after roll number)
+   - Options: 3, 4, 5, 6, 7, 8, 9, 10
+   - Direction: Vertical bubbles
+
+4. SECTION
+   - Location: Top-right area (after class)
+   - Options: A, B, C, D, E, F, G, H
+   - Direction: Vertical bubbles
+
+5. SCHOOL CODE
+   - Location: Top-right area (after section)
+   - Format: 4 digits (0-9 each)
+   - Direction: Vertical bubbles
+
+6. ANSWER SECTION
+   - Location: Bottom half of sheet
+   - Questions: 60 (arranged in 6 columns of 10)
+   - Options: A, B, C, D per question
+   - Direction: Horizontal bubbles
+
+================================================================================
+                        6. TROUBLESHOOTING
+================================================================================
+
+ISSUE: Application won't start
+SOLUTION:
+- macOS: Right-click and select "Open" if blocked by Gatekeeper
+- Windows: Run as Administrator if permission errors occur
+
+ISSUE: Poor detection accuracy
+SOLUTIONS:
+- Ensure scans are at 300 DPI resolution
+- Sheets should be properly aligned (not skewed)
+- Use good quality scans without shadows or artifacts
+- Ensure bubbles are filled darkly and completely
+
+ISSUE: "No answer key loaded" warning
+SOLUTION:
+- Go to Answer Key page and configure all 60 answers
+- Click "Save Answer Key" before processing
+
+ISSUE: Some questions show as "MULTI"
+EXPLANATION:
+- Multiple bubbles were detected as filled for that question
+- This may indicate the candidate marked multiple answers
+- Check the original sheet to verify
+
+ISSUE: Some questions show as empty
+POSSIBLE CAUSES:
+- Bubble was not filled darkly enough
+- Bubble was filled outside the designated area
+- Scan quality issue in that area
+
+ISSUE: Wrong class detected
+EXPLANATION:
+- Class uses values 3-10 (not 0-9)
+- Ensure the correct row is marked on the sheet
+
+ISSUE: Build fails with missing modules
+SOLUTION:
+- Ensure all dependencies are installed:
+  pip install opencv-python numpy pywebview openpyxl Pillow jsonschema pyinstaller
+- Try: pip install --upgrade --force-reinstall [package-name]
+
+================================================================================
+                            7. SUPPORT
+================================================================================
+
+For technical support or bug reports:
+- Check the troubleshooting section above
+- Ensure you are using the latest version
+- Provide details about your system and the issue
+
+When reporting issues, please include:
+- Operating system and version
+- Application version
+- Steps to reproduce the issue
+- Sample images (if applicable, with personal data removed)
+
+================================================================================
+                        END OF DOCUMENTATION
+================================================================================
+
+Document Version: 1.0
+Last Updated: December 2024
+Application: Vidya Bharti Pratibha Khoj and Pratibha Chayan OMR Scanner v1.0.0
+
+Developed by: Avenux Techspire (OPC) PVT LTD
+
+================================================================================

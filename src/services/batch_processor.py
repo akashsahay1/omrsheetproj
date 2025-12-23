@@ -9,7 +9,7 @@ from datetime import datetime
 from dataclasses import dataclass, field
 from enum import Enum
 
-from src.core.omr_engine import OMREngine
+from src.core.omrchecker_engine import OMRCheckerEngine as OMREngine
 from src.models.result import ProcessingResult, BatchResult, EvaluationResult
 from src.models.candidate import Candidate
 from src.models.answer_key import AnswerKey

@@ -37,6 +37,6 @@ echo ===============================================
 echo  Build completed successfully!
 echo ===============================================
 echo.
-echo Executable location: dist\OMRProcessor.exe
+echo Executable location: dist\OMR Processor.exe
 echo.
 pause

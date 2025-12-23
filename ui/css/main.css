@@ -501,6 +501,36 @@ body {
     color: var(--text-light);
 }
 
+.developer-credit {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.85rem;
+    color: var(--text-light);
+}
+
+/* Sidebar Footer */
+.sidebar-footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 15px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    text-align: center;
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.6);
+}
+
+.sidebar-footer a {
+    color: rgba(255,255,255,0.8);
+    text-decoration: none;
+}
+
+.sidebar-footer a:hover {
+    color: white;
+}
+
 /* Modal */
 .modal-overlay {
     position: fixed;

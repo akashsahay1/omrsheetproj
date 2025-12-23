@@ -5,9 +5,10 @@ from enum import Enum
 from typing import List
 
 # Application Info
-APP_NAME = "OMR Processor"
+APP_NAME = "Vidya Bharti Pratibha Khoj and Pratibha Chayan OMR Scanner"
+APP_SHORT_NAME = "VB OMR Scanner"
 APP_VERSION = "1.0.0"
-APP_TITLE = "OMR Processor - Vidya Bharti Pratibha Khoj 2025-26"
+APP_TITLE = "Vidya Bharti Pratibha Khoj and Pratibha Chayan OMR Scanner"
 
 # Supported Image Formats
 SUPPORTED_IMAGE_FORMATS = ['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp']
