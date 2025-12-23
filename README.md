@@ -261,7 +261,7 @@ This project is proprietary software developed for Vidya Bharti examinations.
 
 ## Credits
 
-**Developed by:** [Avenux Techspire (OPC) PVT LTD](https://avenux.com)
+**Developed by:** [Avenux Techspire (OPC) PVT LTD](https://www.avenuxtechspire.com)
 
 **OMR Processing:** Based on [OMRChecker](https://github.com/Udayraj123/OMRChecker) by Udayraj Deshmukh
 
@@ -269,7 +269,7 @@ This project is proprietary software developed for Vidya Bharti examinations.
 
 For technical support or bug reports:
 - Open an issue on [GitHub Issues](https://github.com/akashsahay1/omrsheetproj/issues)
-- Email: support@avenux.com
+- Email: support@avenuxtechspire.com
 
 ---
 
