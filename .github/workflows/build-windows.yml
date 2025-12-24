@@ -13,6 +13,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: List files (debug)
+        run: |
+          Get-Location
+          Get-ChildItem -Force
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -22,24 +29,29 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller
+          pip install pyinstaller pyinstaller-hooks-contrib
           pip install opencv-python numpy pandas pywebview openpyxl Pillow jsonschema rich matplotlib dotmap deepmerge screeninfo
 
       - name: Build Windows executable
         run: |
-          pyinstaller build.spec --clean --noconfirm
+          Get-ChildItem -Filter "*.spec"
+          python -m PyInstaller build.spec --clean --noconfirm
+
+      - name: List dist folder
+        run: |
+          Get-ChildItem -Path dist -Recurse
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: VB-OMR-Scanner-Windows
-          path: dist/VB OMR Scanner.exe
+          path: dist/*.exe
           retention-days: 30
 
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: dist/VB OMR Scanner.exe
+          files: dist/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
