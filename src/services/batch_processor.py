@@ -228,6 +228,11 @@ class BatchProcessor:
                     if result.success and result.candidate:
                         result.candidate.image_index = idx
                         candidates.append(result.candidate)
+                        logger.info(f"Successfully processed {filename}: "
+                                   f"name='{result.candidate.name}', "
+                                   f"roll='{result.candidate.roll_number}'")
+                    else:
+                        logger.warning(f"Failed to process {filename}: {result.error_message}")
 
                     if not result.success:
                         self._progress.errors.append(
@@ -250,11 +255,18 @@ class BatchProcessor:
 
             # Finalize if not cancelled
             if not self._is_cancelled:
+                logger.info(f"Batch processing complete: {len(candidates)} candidates collected")
+
                 # Score if requested
                 if with_scoring and self.scorer.answer_key:
                     self._update_progress(message="Calculating scores...")
+                    logger.info(f"Scoring {len(candidates)} candidates with answer key")
                     evaluation_results = self.scorer.evaluate_batch(candidates)
                     self._batch_result.evaluation_results = evaluation_results
+                    logger.info(f"Scoring complete: {len(evaluation_results)} evaluation results")
+                else:
+                    logger.warning(f"Skipping scoring: with_scoring={with_scoring}, "
+                                  f"answer_key_set={self.scorer.answer_key is not None}")
 
                 # Export if path provided
                 if output_path:

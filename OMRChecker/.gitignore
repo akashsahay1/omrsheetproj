@@ -3,8 +3,10 @@
 # Except .github
 !.github/
 
-# Everything in inputs/ and outputs/
+# Everything in inputs/ and outputs/ except templates
 inputs/*
+!inputs/VidyaBharti2025/
+!inputs/.gitignore
 outputs/*
 
 # Misc

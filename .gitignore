@@ -49,6 +49,11 @@ nul
 data/
 exports/
 
+# Logs (ignore log files but keep the folder)
+logs/*.log
+logs/omr-*.log
+logs/*.log.*
+
 # OMRChecker outputs
 OMRChecker/outputs/
 OMRChecker/inputs/_temp_processing/

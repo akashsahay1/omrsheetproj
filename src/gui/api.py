@@ -262,28 +262,73 @@ class OMRApi:
         batch_result = self.batch_processor.get_results()
 
         if batch_result is None:
+            logger.warning("get_results: batch_result is None")
             return {'success': False, 'message': 'No results available'}
+
+        logger.info(f"get_results: total_sheets={batch_result.total_sheets}, "
+                   f"success_count={batch_result.success_count}, "
+                   f"evaluation_results={len(batch_result.evaluation_results)}, "
+                   f"raw_results={len(batch_result.results)}")
 
         # Store results for later access
         self._current_results = batch_result.evaluation_results
 
         results_data = []
-        for result in batch_result.evaluation_results:
-            if result.candidate:
-                results_data.append({
-                    'name': result.candidate.name,
-                    'roll_number': result.candidate.roll_number,
-                    'class': result.candidate.class_,
-                    'section': result.candidate.section,
-                    'school_code': result.candidate.school_code,
-                    'correct': result.correct_count,
-                    'wrong': result.wrong_count,
-                    'unanswered': result.unanswered_count,
-                    'multi_marked': result.multi_marked_count,
-                    'total_score': result.total_score,
-                    'percentage': result.percentage,
-                    'rank': result.rank
-                })
+
+        # Try to get evaluation results first (with scoring)
+        if batch_result.evaluation_results:
+            for result in batch_result.evaluation_results:
+                if result.candidate:
+                    results_data.append({
+                        'name': result.candidate.name,
+                        'roll_number': result.candidate.roll_number,
+                        'class': result.candidate.class_,
+                        'section': result.candidate.section,
+                        'school_code': result.candidate.school_code,
+                        'correct': result.correct_count,
+                        'wrong': result.wrong_count,
+                        'unanswered': result.unanswered_count,
+                        'multi_marked': result.multi_marked_count,
+                        'total_score': result.total_score,
+                        'percentage': result.percentage,
+                        'rank': result.rank
+                    })
+        else:
+            # Fallback: Use raw processing results without scoring
+            logger.warning("No evaluation results, falling back to raw processing results")
+            for result in batch_result.results:
+                if result.success and result.candidate:
+                    results_data.append({
+                        'name': result.candidate.name,
+                        'roll_number': result.candidate.roll_number,
+                        'class': result.candidate.class_,
+                        'section': result.candidate.section,
+                        'school_code': result.candidate.school_code,
+                        'correct': 0,
+                        'wrong': 0,
+                        'unanswered': 60,
+                        'multi_marked': result.candidate.multi_marked_count,
+                        'total_score': 0,
+                        'percentage': 0,
+                        'rank': 0
+                    })
+
+        if not results_data:
+            # Check for processing errors
+            failed_count = batch_result.failed_count
+            if failed_count > 0:
+                error_messages = []
+                for r in batch_result.results:
+                    if not r.success and r.error_message:
+                        error_messages.append(r.error_message)
+                logger.error(f"All processing failed. Errors: {error_messages[:5]}")
+                return {
+                    'success': False,
+                    'message': f'Processing failed for all {failed_count} sheets. Check logs for details.',
+                    'errors': error_messages[:5]
+                }
+
+        logger.info(f"Returning {len(results_data)} results")
 
         return {
             'success': True,

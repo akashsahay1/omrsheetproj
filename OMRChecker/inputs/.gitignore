@@ -1,1 +1,6 @@
+# Ignore all files in this directory except:
+*
+# Keep the .gitignore file
 !.gitignore
+# Keep the VidyaBharti2025 template directory
+!VidyaBharti2025/

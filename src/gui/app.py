@@ -10,7 +10,7 @@ from typing import Optional
 from src.gui.api import OMRApi
 from src.config.settings import Settings
 from src.config.constants import APP_TITLE
-from src.utils.logging_utils import setup_logging, get_logger
+from src.utils.logging_utils import initialize_logging, get_logger
 
 logger = get_logger('app')
 
@@ -24,8 +24,8 @@ class OMRApp:
 
     def __init__(self):
         """Initialize the application"""
-        # Setup logging
-        setup_logging()
+        # Ensure logging is initialized (may already be done in main.py)
+        initialize_logging()
 
         # Load settings
         self.settings = Settings.load()

@@ -149,8 +149,38 @@ class OMRCheckerEngine:
         self._outputs_dir = WRITABLE_PATH / 'outputs'
         self._outputs_dir.mkdir(exist_ok=True)
 
+        # Validate template exists
+        self._validate_template()
+
         # Initialize OMRChecker modules ONCE
         _setup_omrchecker_imports()
+
+    def _validate_template(self) -> None:
+        """Validate that required template files exist."""
+        if not self.template_path.exists():
+            logger.error(f"Template file not found: {self.template_path}")
+            logger.error(f"Expected location: {self.template_path.absolute()}")
+            logger.error(f"OMRCHECKER_PATH: {OMRCHECKER_PATH}")
+            logger.error(f"PROJECT_ROOT: {PROJECT_ROOT}")
+
+            # Try alternative paths
+            alt_paths = [
+                PROJECT_ROOT / 'templates' / 'vidya_bharti_2025' / 'template.json',
+                OMRCHECKER_PATH / 'samples' / 'sample1' / 'template.json',
+            ]
+
+            for alt in alt_paths:
+                if alt.exists():
+                    logger.warning(f"Found alternative template at: {alt}")
+                    self.template_path = alt
+                    return
+
+            raise FileNotFoundError(
+                f"Template file not found at {self.template_path}. "
+                f"Please ensure the template directory is properly cloned."
+            )
+        else:
+            logger.info(f"Template validated: {self.template_path}")
 
     def initialize_batch(self) -> bool:
         """
@@ -246,8 +276,10 @@ class OMRCheckerEngine:
                 temp_image.unlink()
 
             if result_data:
+                logger.info(f"Successfully got result data for {image_path}")
                 candidate = self._convert_to_candidate(result_data, image_path)
                 processing_time = (time.time() - start_time) * 1000
+                logger.info(f"Converted to candidate: name='{candidate.name}', roll='{candidate.roll_number}'")
 
                 return ProcessingResult(
                     success=True,
@@ -256,6 +288,7 @@ class OMRCheckerEngine:
                     processing_time_ms=processing_time
                 )
             else:
+                logger.warning(f"OMRChecker returned no results for {image_path}")
                 return ProcessingResult(
                     success=False,
                     error_message="OMRChecker returned no results",
@@ -352,23 +385,44 @@ class OMRCheckerEngine:
         """Parse OMRChecker CSV results."""
         try:
             results_dir = self._outputs_dir / 'Results'
+            logger.info(f"Looking for results in: {results_dir}")
+            logger.info(f"Results directory exists: {results_dir.exists()}")
+
+            if results_dir.exists():
+                all_files = list(results_dir.iterdir())
+                logger.info(f"Files in results directory: {[f.name for f in all_files]}")
+
             csv_files = list(results_dir.glob('Results_*.csv'))
+            logger.info(f"Found {len(csv_files)} CSV files matching 'Results_*.csv'")
 
             if csv_files:
                 csv_file = max(csv_files, key=lambda p: p.stat().st_mtime)
+                logger.info(f"Using most recent CSV file: {csv_file}")
 
                 with open(csv_file, 'r') as f:
                     reader = csv.DictReader(f)
                     result_row = None
+                    row_count = 0
                     for row in reader:
                         result_row = dict(row)
+                        row_count += 1
+
+                    logger.info(f"Parsed {row_count} rows from CSV")
+                    if result_row:
+                        logger.info(f"Last row keys: {list(result_row.keys())[:10]}...")
                     return result_row
 
-            logger.warning("No CSV results found")
+            logger.warning(f"No CSV results found in {results_dir}")
+            # List what's in the outputs directory
+            if self._outputs_dir.exists():
+                output_contents = list(self._outputs_dir.iterdir())
+                logger.warning(f"Contents of outputs dir: {[f.name for f in output_contents]}")
             return None
 
         except Exception as e:
             logger.error(f"Error parsing results: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
 
     def _cleanup(self):
@@ -392,21 +446,28 @@ class OMRCheckerEngine:
         if has_individual_cols:
             # Build name from individual columns, treating empty columns as spaces
             name_chars = []
-            last_non_empty = 0
 
             for i in range(1, 26):
                 key = f'name{i}'
                 if key in result_data:
                     char = str(result_data[key]).strip() if result_data[key] else ''
                     if char:
-                        # Add spaces for any skipped empty columns
-                        while len(name_chars) < i - 1:
-                            name_chars.append(' ')
+                        # Valid character detected
                         name_chars.append(char)
-                        last_non_empty = len(name_chars)
+                    else:
+                        # Empty/blank column - treat as space
+                        name_chars.append(' ')
+                else:
+                    # Column not in data - treat as space
+                    name_chars.append(' ')
 
-            # Trim trailing spaces but keep internal ones
-            candidate.name = ''.join(name_chars[:last_non_empty]).strip()
+            # Join all characters and strip trailing spaces only
+            # This preserves internal spaces while removing trailing blanks
+            full_name = ''.join(name_chars)
+            candidate.name = full_name.rstrip()
+
+            logger.debug(f"Name extraction: raw chars = {name_chars}")
+            logger.debug(f"Name extraction: final name = '{candidate.name}'")
         elif 'CandidateName' in result_data:
             candidate.name = str(result_data['CandidateName']).strip()
         else:
