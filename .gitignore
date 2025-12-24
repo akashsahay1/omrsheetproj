@@ -16,6 +16,7 @@ env/
 build/
 dist/
 *.spec
+!build.spec
 
 # Debug/temp files
 debug_*.py
