@@ -16,6 +16,22 @@ from src.utils.logging_utils import get_logger
 logger = get_logger('excel_exporter')
 
 
+def get_academic_year() -> str:
+    """Get current academic year in format YYYY-YY (e.g., 2025-26)"""
+    now = datetime.now()
+    year = now.year
+    month = now.month
+
+    # Academic year starts in April
+    if month >= 4:  # April onwards - current year to next year
+        start_year = year
+    else:  # Jan-Mar - previous year to current year
+        start_year = year - 1
+
+    end_year_short = str(start_year + 1)[-2:]  # Last 2 digits of end year
+    return f"{start_year}-{end_year_short}"
+
+
 class ExcelExporter:
     """
     Export processing results to Excel format
@@ -44,7 +60,9 @@ class ExcelExporter:
                evaluation_results: List[EvaluationResult],
                output_path: str,
                include_summary: bool = True,
-               include_answers: bool = True) -> bool:
+               include_answers: bool = True,
+               exam_level: str = 'Anshik',
+               exam_type: str = 'Chayan') -> bool:
         """
         Export results to Excel file
 
@@ -53,6 +71,8 @@ class ExcelExporter:
             output_path: Output file path
             include_summary: Include summary statistics
             include_answers: Include individual question answers
+            exam_level: Exam level (Anshik/Mukhya)
+            exam_type: Exam type (Chayan/Khoj)
 
         Returns:
             True if export successful
@@ -61,7 +81,8 @@ class ExcelExporter:
             wb = Workbook()
 
             # Main results sheet
-            self._create_results_sheet(wb, evaluation_results, include_answers)
+            self._create_results_sheet(wb, evaluation_results, include_answers,
+                                      exam_level, exam_type)
 
             # Summary sheet (optional)
             if include_summary and evaluation_results:
@@ -81,16 +102,58 @@ class ExcelExporter:
     def _create_results_sheet(self,
                                wb: Workbook,
                                results: List[EvaluationResult],
-                               include_answers: bool) -> None:
-        """Create main results sheet"""
+                               include_answers: bool,
+                               exam_level: str = 'Anshik',
+                               exam_type: str = 'Chayan') -> None:
+        """Create main results sheet with organization header"""
         ws = wb.active
         ws.title = "Results"
 
-        # Headers
+        # Merge headers only across main data columns (A to M = 13 columns)
+        # This keeps headers centered and visible without scrolling
+        header_merge_col = 'M'  # S.No. to Rank (13 columns)
+
+        # ========== ORGANIZATION HEADER ROWS ==========
+
+        # Row 1: Organization Name (Bold, Large, Centered)
+        ws.merge_cells(f'A1:{header_merge_col}1')
+        cell_org = ws.cell(row=1, column=1, value="VIDYA VIKAS SAMITI, JHARKHAND")
+        cell_org.font = Font(bold=True, size=16)
+        cell_org.alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[1].height = 25
+
+        # Row 2: Address (Centered)
+        ws.merge_cells(f'A2:{header_merge_col}2')
+        cell_addr = ws.cell(row=2, column=1, value="Shukla Colony, Hinoo, Ranchi")
+        cell_addr.font = Font(size=12)
+        cell_addr.alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[2].height = 20
+
+        # Row 3: Empty
+
+        # Row 4: Exam Title (Bold, Centered) - English only
+        academic_year = get_academic_year()
+        exam_title = f"Vidya Bharti Pratibha {exam_type} Pratiyogita {exam_level} Pariksha {academic_year}"
+
+        ws.merge_cells(f'A4:{header_merge_col}4')
+        cell_title = ws.cell(row=4, column=1, value=exam_title)
+        cell_title.font = Font(bold=True, size=14)
+        cell_title.alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[4].height = 25
+
+        # Row 5: Empty
+        # Row 6: Empty
+
+        # ========== COLUMN HEADERS (Row 7) ==========
+        header_row = 7
+
+        # New column order as specified:
+        # S.No., Name, School Code, Class, Section, Roll No., Total Score, Percentage,
+        # Correct, Wrong, Unanswered, Multi-Marked, Rank, Q1-Q60
         headers = [
-            "S.No.", "Name", "Roll No.", "Class", "Section", "School Code",
-            "Correct", "Wrong", "Unanswered", "Multi-Marked",
-            "Total Score", "Percentage", "Rank"
+            "S.No.", "Name", "School Code", "Class", "Section", "Roll No.",
+            "Total Score", "Percentage", "Correct", "Wrong", "Unanswered",
+            "Multi-Marked", "Rank"
         ]
 
         # Add question columns if requested
@@ -100,61 +163,77 @@ class ExcelExporter:
 
         # Write headers
         for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=header)
+            cell = ws.cell(row=header_row, column=col, value=header)
             cell.font = self.header_font_white
             cell.fill = self.header_fill
             cell.alignment = self.center_align
             cell.border = self.thin_border
 
-        # Write data
-        for row_idx, result in enumerate(results, 2):
+        # ========== DATA ROWS (Starting Row 8) ==========
+        data_start_row = 8
+
+        for row_idx, result in enumerate(results, data_start_row):
             candidate = result.candidate
 
             if candidate is None:
                 continue
 
-            # Basic info
-            ws.cell(row=row_idx, column=1, value=row_idx - 1)  # S.No.
-            ws.cell(row=row_idx, column=2, value=candidate.name)
-            ws.cell(row=row_idx, column=3, value=candidate.roll_number)
-            ws.cell(row=row_idx, column=4, value=candidate.class_)
-            ws.cell(row=row_idx, column=5, value=candidate.section)
-            ws.cell(row=row_idx, column=6, value=candidate.school_code)
+            data_row = row_idx
+            serial_no = row_idx - data_start_row + 1
 
-            # Scores
-            ws.cell(row=row_idx, column=7, value=result.correct_count)
-            ws.cell(row=row_idx, column=8, value=result.wrong_count)
-            ws.cell(row=row_idx, column=9, value=result.unanswered_count)
-            ws.cell(row=row_idx, column=10, value=result.multi_marked_count)
-            ws.cell(row=row_idx, column=11, value=result.total_score)
-            ws.cell(row=row_idx, column=12, value=f"{result.percentage}%")
-            ws.cell(row=row_idx, column=13, value=result.rank)
+            # New column order:
+            # 1: S.No.
+            ws.cell(row=data_row, column=1, value=serial_no)
+            # 2: Name
+            ws.cell(row=data_row, column=2, value=candidate.name)
+            # 3: School Code
+            ws.cell(row=data_row, column=3, value=candidate.school_code)
+            # 4: Class
+            ws.cell(row=data_row, column=4, value=candidate.class_)
+            # 5: Section
+            ws.cell(row=data_row, column=5, value=candidate.section)
+            # 6: Roll No.
+            ws.cell(row=data_row, column=6, value=candidate.roll_number)
+            # 7: Total Score
+            ws.cell(row=data_row, column=7, value=result.total_score)
+            # 8: Percentage
+            ws.cell(row=data_row, column=8, value=f"{result.percentage}%")
+            # 9: Correct
+            ws.cell(row=data_row, column=9, value=result.correct_count)
+            # 10: Wrong
+            ws.cell(row=data_row, column=10, value=result.wrong_count)
+            # 11: Unanswered
+            ws.cell(row=data_row, column=11, value=result.unanswered_count)
+            # 12: Multi-Marked
+            ws.cell(row=data_row, column=12, value=result.multi_marked_count)
+            # 13: Rank
+            ws.cell(row=data_row, column=13, value=result.rank)
 
-            # Apply formatting
+            # Apply formatting to all data columns
             for col in range(1, 14):
-                cell = ws.cell(row=row_idx, column=col)
+                cell = ws.cell(row=data_row, column=col)
                 cell.border = self.thin_border
-                if col in [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]:
+                if col != 2:  # All centered except Name column
                     cell.alignment = self.center_align
 
-            # Add answers if requested
+            # Add answers if requested (columns 14-73 for Q1-Q60)
             if include_answers:
                 for q in range(1, 61):
                     col = 13 + q
                     answer = candidate.get_answer(q)
-                    cell = ws.cell(row=row_idx, column=col, value=answer)
+                    cell = ws.cell(row=data_row, column=col, value=answer)
                     cell.alignment = self.center_align
                     cell.border = self.thin_border
 
-                    # Color code
+                    # Color code multi-marked
                     if answer == "MULTI":
                         cell.fill = self.yellow_fill
 
         # Auto-adjust column widths
         self._auto_adjust_columns(ws)
 
-        # Freeze header row
-        ws.freeze_panes = "A2"
+        # Freeze header row (row 7)
+        ws.freeze_panes = f"A{data_start_row}"
 
     def _create_summary_sheet(self,
                                wb: Workbook,
@@ -208,11 +287,23 @@ class ExcelExporter:
         """Auto-adjust column widths based on content"""
         for column_cells in ws.columns:
             max_length = 0
-            column = column_cells[0].column_letter
+            column = None
+
+            # Find the column letter from a non-merged cell
+            for cell in column_cells:
+                if hasattr(cell, 'column_letter'):
+                    column = cell.column_letter
+                    break
+                elif hasattr(cell, 'column'):
+                    column = get_column_letter(cell.column)
+                    break
+
+            if column is None:
+                continue
 
             for cell in column_cells:
                 try:
-                    if cell.value:
+                    if hasattr(cell, 'value') and cell.value:
                         cell_length = len(str(cell.value))
                         if cell_length > max_length:
                             max_length = cell_length

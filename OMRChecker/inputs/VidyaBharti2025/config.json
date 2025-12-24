@@ -1,0 +1,13 @@
+{
+  "threshold_params": {
+    "GAMMA_LOW": 0.6,
+    "MIN_GAP": 15,
+    "MIN_JUMP": 12,
+    "CONFIDENT_SURPLUS": 3,
+    "JUMP_DELTA": 12
+  },
+  "outputs": {
+    "show_image_level": 0,
+    "save_image_level": 4
+  }
+}

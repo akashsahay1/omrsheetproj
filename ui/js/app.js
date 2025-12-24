@@ -11,7 +11,9 @@ const AppState = {
     answerKey: null,
     isProcessing: false,
     results: [],
-    progressInterval: null
+    progressInterval: null,
+    examLevel: 'Anshik',
+    examType: 'Chayan'
 };
 
 // Initialize application when DOM is ready
@@ -248,11 +250,17 @@ async function startProcessing() {
         return;
     }
 
+    // Get exam type selections
+    AppState.examLevel = document.getElementById('exam-level').value;
+    AppState.examType = document.getElementById('exam-type').value;
+
     // Start processing
     const result = await API.startProcessing(
         AppState.inputFolder,
         AppState.outputFile || null,
-        withScoring
+        withScoring,
+        AppState.examLevel,
+        AppState.examType
     );
 
     if (result.success) {
@@ -498,7 +506,11 @@ async function exportResults() {
     const result = await API.selectOutputFile();
 
     if (result.success) {
-        const exportResult = await API.exportResults(result.path);
+        // Get current exam selections
+        const examLevel = document.getElementById('exam-level')?.value || AppState.examLevel;
+        const examType = document.getElementById('exam-type')?.value || AppState.examType;
+
+        const exportResult = await API.exportResults(result.path, examLevel, examType);
 
         if (exportResult.success) {
             showToast('Results exported successfully', 'success');

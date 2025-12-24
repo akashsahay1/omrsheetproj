@@ -42,6 +42,8 @@ class OMRApi:
         # State
         self._current_results: List[EvaluationResult] = []
         self._answer_key: Optional[AnswerKey] = None
+        self._exam_level: str = 'Anshik'
+        self._exam_type: str = 'Chayan'
 
     def set_window(self, window: webview.Window) -> None:
         """Set window reference"""
@@ -202,7 +204,9 @@ class OMRApi:
     def start_processing(self,
                          input_folder: str,
                          output_path: Optional[str] = None,
-                         with_scoring: bool = True) -> Dict[str, Any]:
+                         with_scoring: bool = True,
+                         exam_level: str = 'Anshik',
+                         exam_type: str = 'Chayan') -> Dict[str, Any]:
         """Start batch processing"""
         try:
             # Validate input
@@ -212,11 +216,17 @@ class OMRApi:
             if with_scoring and self._answer_key is None:
                 return {'success': False, 'message': 'Answer key required for scoring'}
 
+            # Store exam settings
+            self._exam_level = exam_level
+            self._exam_type = exam_type
+
             # Start processing
             started = self.batch_processor.start(
                 input_folder=input_folder,
                 output_path=output_path,
-                with_scoring=with_scoring
+                with_scoring=with_scoring,
+                exam_level=exam_level,
+                exam_type=exam_type
             )
 
             return {
@@ -304,13 +314,24 @@ class OMRApi:
             'evaluation': result.to_dict()
         }
 
-    def export_results(self, output_path: str) -> Dict[str, Any]:
+    def export_results(self, output_path: str,
+                       exam_level: Optional[str] = None,
+                       exam_type: Optional[str] = None) -> Dict[str, Any]:
         """Export results to Excel"""
         try:
             if not self._current_results:
                 return {'success': False, 'message': 'No results to export'}
 
-            success = self.exporter.export(self._current_results, output_path)
+            # Use provided values or stored values
+            level = exam_level if exam_level else self._exam_level
+            etype = exam_type if exam_type else self._exam_type
+
+            success = self.exporter.export(
+                self._current_results,
+                output_path,
+                exam_level=level,
+                exam_type=etype
+            )
 
             return {
                 'success': success,

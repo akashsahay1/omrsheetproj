@@ -56,8 +56,8 @@ const API = {
     },
 
     // Processing
-    async startProcessing(inputFolder, outputPath, withScoring) {
-        return this.call('start_processing', inputFolder, outputPath, withScoring);
+    async startProcessing(inputFolder, outputPath, withScoring, examLevel, examType) {
+        return this.call('start_processing', inputFolder, outputPath, withScoring, examLevel, examType);
     },
 
     async cancelProcessing() {
@@ -81,8 +81,8 @@ const API = {
         return this.call('get_result_detail', index);
     },
 
-    async exportResults(outputPath) {
-        return this.call('export_results', outputPath);
+    async exportResults(outputPath, examLevel, examType) {
+        return this.call('export_results', outputPath, examLevel, examType);
     },
 
     // Settings

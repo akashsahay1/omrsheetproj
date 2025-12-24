@@ -40,7 +40,9 @@
       "Bash(pkill:*)",
       "Bash(brew list:*)",
       "Bash(open \"dist/VB OMR Scanner.app\")",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)"
     ]
   }
 }

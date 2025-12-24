@@ -95,6 +95,10 @@ class BatchProcessor:
         self._batch_result: Optional[BatchResult] = None
         self._progress_callback: Optional[Callable[[ProcessingProgress], None]] = None
 
+        # Exam settings for export
+        self._exam_level: str = 'Anshik'
+        self._exam_type: str = 'Chayan'
+
     def set_answer_key(self, answer_key: AnswerKey) -> None:
         """Set answer key for scoring"""
         self.scorer.set_answer_key(answer_key)
@@ -107,7 +111,9 @@ class BatchProcessor:
               input_folder: str,
               output_path: Optional[str] = None,
               progress_callback: Optional[Callable[[ProcessingProgress], None]] = None,
-              with_scoring: bool = True) -> bool:
+              with_scoring: bool = True,
+              exam_level: str = 'Anshik',
+              exam_type: str = 'Chayan') -> bool:
         """
         Start batch processing in background thread
 
@@ -116,10 +122,15 @@ class BatchProcessor:
             output_path: Optional Excel output path
             progress_callback: Optional callback for progress updates
             with_scoring: Whether to score results (requires answer key)
+            exam_level: Exam level (Anshik/Mukhya)
+            exam_type: Exam type (Chayan/Khoj)
 
         Returns:
             True if processing started successfully
         """
+        # Store exam settings
+        self._exam_level = exam_level
+        self._exam_type = exam_type
         # Check if already running
         if self._thread is not None and self._thread.is_alive():
             logger.warning("Batch processing already in progress")
@@ -180,6 +191,10 @@ class BatchProcessor:
 
         processed_count = 0
         candidates = []
+
+        # Initialize batch processing for optimization
+        # This copies template once instead of per-image
+        self.engine.initialize_batch()
 
         try:
             for idx, image_path in enumerate(image_files):
@@ -248,7 +263,9 @@ class BatchProcessor:
                     if with_scoring and self._batch_result.evaluation_results:
                         self.exporter.export(
                             self._batch_result.evaluation_results,
-                            output_path
+                            output_path,
+                            exam_level=self._exam_level,
+                            exam_type=self._exam_type
                         )
                     else:
                         self.exporter.export_simple(candidates, output_path)
@@ -272,6 +289,10 @@ class BatchProcessor:
                 status=BatchStatus.ERROR,
                 message=f"Error: {str(e)}"
             )
+
+        finally:
+            # Clean up batch processing directory
+            self.engine.finalize_batch()
 
     def _update_progress(self, **kwargs) -> None:
         """Update progress and notify callback"""

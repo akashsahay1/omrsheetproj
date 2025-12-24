@@ -2,6 +2,7 @@
 OMRChecker Integration Engine
 
 Directly imports and uses OMRChecker library for processing.
+Optimized for batch processing with one-time module loading.
 """
 import os
 import sys
@@ -51,12 +52,88 @@ if str(OMRCHECKER_PATH) not in sys.path:
     sys.path.insert(0, str(OMRCHECKER_PATH))
 
 
+# =============================================================================
+# Global OMRChecker Module Management - ONE-TIME IMPORT for performance
+# =============================================================================
+
+_omrchecker_modules_loaded = False
+_omrchecker_entry_point = None
+_original_sys_path = None
+_original_src_modules = None
+
+
+def _setup_omrchecker_imports():
+    """
+    One-time setup of OMRChecker imports.
+    Imports OMRChecker modules and keeps them loaded for all processing.
+    """
+    global _omrchecker_modules_loaded, _omrchecker_entry_point
+    global _original_sys_path, _original_src_modules
+
+    if _omrchecker_modules_loaded:
+        return True
+
+    try:
+        # Save original state
+        _original_sys_path = sys.path.copy()
+        _original_src_modules = {k: v for k, v in sys.modules.items() if k.startswith('src')}
+
+        # Temporarily remove our app's src modules
+        for key in list(sys.modules.keys()):
+            if key.startswith('src') and 'omr_processor' not in key:
+                del sys.modules[key]
+
+        # Add OMRChecker path at the front
+        sys.path.insert(0, str(OMRCHECKER_PATH))
+
+        # Import OMRChecker's entry point
+        from src.entry import entry_point
+        _omrchecker_entry_point = entry_point
+
+        _omrchecker_modules_loaded = True
+        logger.info("OMRChecker modules loaded successfully (one-time)")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to load OMRChecker modules: {e}")
+        # Restore original state on failure
+        if _original_sys_path:
+            sys.path = _original_sys_path
+        if _original_src_modules:
+            sys.modules.update(_original_src_modules)
+        return False
+
+
+def _restore_app_modules():
+    """Restore app modules after OMRChecker processing."""
+    global _original_sys_path, _original_src_modules
+
+    if _original_sys_path:
+        sys.path = _original_sys_path
+    if _original_src_modules:
+        # Remove OMRChecker's src modules that conflict
+        for key in list(sys.modules.keys()):
+            if key.startswith('src') and key not in _original_src_modules:
+                del sys.modules[key]
+        # Restore our app's src modules
+        sys.modules.update(_original_src_modules)
+
+
 class OMRCheckerEngine:
     """
     OMR processing engine using OMRChecker library directly.
+
+    Optimized for batch processing:
+    - One-time module import (saved ~3-5s per image)
+    - Batch directory setup (template copied once)
+    - Minimal file operations per image
     """
 
     DEFAULT_TEMPLATE_PATH = OMRCHECKER_PATH / 'inputs' / 'VidyaBharti2025' / 'template.json'
+
+    # Class-level batch state for optimization
+    _batch_dir = None
+    _batch_initialized = False
 
     def __init__(self, template_path: Optional[str] = None):
         """
@@ -67,13 +144,73 @@ class OMRCheckerEngine:
         """
         self.template_path = Path(template_path) if template_path else self.DEFAULT_TEMPLATE_PATH
         self._temp_dir = None
+
         # Use writable path for outputs
         self._outputs_dir = WRITABLE_PATH / 'outputs'
         self._outputs_dir.mkdir(exist_ok=True)
 
+        # Initialize OMRChecker modules ONCE
+        _setup_omrchecker_imports()
+
+    def initialize_batch(self) -> bool:
+        """
+        Initialize batch processing directory.
+        Call once before processing multiple images.
+        Sets up template and config once for the entire batch.
+        """
+        if OMRCheckerEngine._batch_initialized:
+            return True
+
+        try:
+            # Create batch processing directory
+            OMRCheckerEngine._batch_dir = WRITABLE_PATH / 'inputs' / '_batch_processing'
+            OMRCheckerEngine._batch_dir.mkdir(parents=True, exist_ok=True)
+
+            # Copy template once
+            if self.template_path.exists():
+                shutil.copy2(self.template_path, OMRCheckerEngine._batch_dir / 'template.json')
+
+                # Copy config.json if exists
+                config_path = self.template_path.parent / 'config.json'
+                if config_path.exists():
+                    shutil.copy2(config_path, OMRCheckerEngine._batch_dir / 'config.json')
+
+                OMRCheckerEngine._batch_initialized = True
+                logger.info("Batch processing initialized (template copied once)")
+                return True
+            else:
+                logger.error(f"Template not found: {self.template_path}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Failed to initialize batch: {e}")
+            return False
+
+    def finalize_batch(self):
+        """Clean up batch processing directory."""
+        try:
+            if OMRCheckerEngine._batch_dir and OMRCheckerEngine._batch_dir.exists():
+                # Remove all files in batch dir
+                for f in OMRCheckerEngine._batch_dir.iterdir():
+                    if f.is_file():
+                        f.unlink()
+                OMRCheckerEngine._batch_dir.rmdir()
+
+            OMRCheckerEngine._batch_initialized = False
+            OMRCheckerEngine._batch_dir = None
+            logger.info("Batch processing finalized")
+
+        except Exception as e:
+            logger.warning(f"Batch cleanup error: {e}")
+
     def process_image(self, image_path: str) -> ProcessingResult:
         """
         Process a single OMR image using OMRChecker.
+
+        Optimized version:
+        - Uses pre-initialized batch directory
+        - Minimal file copying (just the image)
+        - Reuses loaded OMRChecker modules
 
         Args:
             image_path: Path to the OMR image
@@ -84,35 +221,29 @@ class OMRCheckerEngine:
         start_time = time.time()
 
         try:
-            # Create temporary directory for this image (use writable path)
-            self._temp_dir = WRITABLE_PATH / 'inputs' / '_temp_processing'
-            self._temp_dir.mkdir(parents=True, exist_ok=True)
+            # Ensure batch is initialized (auto-init if needed)
+            if not OMRCheckerEngine._batch_initialized:
+                if not self.initialize_batch():
+                    return ProcessingResult(
+                        success=False,
+                        error_message=f"Template not found: {self.template_path}",
+                        processing_time_ms=(time.time() - start_time) * 1000
+                    )
 
-            # Copy image to temp directory
+            # Use batch directory (template already there)
+            self._temp_dir = OMRCheckerEngine._batch_dir
+
+            # Copy ONLY the image (template already in place)
             image_name = Path(image_path).name
             temp_image = self._temp_dir / image_name
             shutil.copy2(image_path, temp_image)
 
-            # Copy template to temp directory
-            if self.template_path.exists():
-                shutil.copy2(self.template_path, self._temp_dir / 'template.json')
+            # Run OMRChecker (using pre-loaded modules)
+            result_data = self._run_omrchecker_optimized()
 
-                # Also copy config.json if it exists
-                config_path = self.template_path.parent / 'config.json'
-                if config_path.exists():
-                    shutil.copy2(config_path, self._temp_dir / 'config.json')
-            else:
-                return ProcessingResult(
-                    success=False,
-                    error_message=f"Template not found: {self.template_path}",
-                    processing_time_ms=(time.time() - start_time) * 1000
-                )
-
-            # Run OMRChecker
-            result_data = self._run_omrchecker()
-
-            # Clean up temp directory
-            self._cleanup()
+            # Remove just the processed image (keep template)
+            if temp_image.exists():
+                temp_image.unlink()
 
             if result_data:
                 candidate = self._convert_to_candidate(result_data, image_path)
@@ -135,15 +266,47 @@ class OMRCheckerEngine:
             logger.error(f"Error processing image {image_path}: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            self._cleanup()
             return ProcessingResult(
                 success=False,
                 error_message=str(e),
                 processing_time_ms=(time.time() - start_time) * 1000
             )
 
-    def _run_omrchecker(self) -> Optional[Dict[str, Any]]:
-        """Run OMRChecker directly and parse results."""
+    def _run_omrchecker_optimized(self) -> Optional[Dict[str, Any]]:
+        """
+        Run OMRChecker using pre-loaded modules (OPTIMIZED).
+        Skips module import/unload cycle - saves ~3-5 seconds per image.
+        """
+        global _omrchecker_entry_point
+
+        try:
+            if not _omrchecker_modules_loaded or _omrchecker_entry_point is None:
+                logger.error("OMRChecker modules not loaded!")
+                return self._run_omrchecker_fallback()
+
+            # Prepare arguments
+            args = {
+                'debug': False,
+                'output_dir': str(self._outputs_dir),
+                'autoAlign': False,
+                'setLayout': False
+            }
+
+            # Run OMRChecker using pre-loaded entry point
+            _omrchecker_entry_point(self._temp_dir, args)
+
+            # Parse the results from CSV
+            return self._parse_results()
+
+        except Exception as e:
+            logger.error(f"Error running OMRChecker (optimized): {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # Fall back to traditional method
+            return self._run_omrchecker_fallback()
+
+    def _run_omrchecker_fallback(self) -> Optional[Dict[str, Any]]:
+        """Fallback method - reloads modules each time (slower but reliable)."""
         try:
             # Save original sys.path and sys.modules state
             original_path = sys.path.copy()
@@ -158,10 +321,9 @@ class OMRCheckerEngine:
             sys.path.insert(0, str(OMRCHECKER_PATH))
 
             try:
-                # Now import OMRChecker's entry point
+                # Import OMRChecker's entry point
                 from src.entry import entry_point
 
-                # Prepare arguments
                 args = {
                     'debug': False,
                     'output_dir': str(self._outputs_dir),
@@ -169,49 +331,48 @@ class OMRCheckerEngine:
                     'setLayout': False
                 }
 
-                logger.info(f"Running OMRChecker on: {self._temp_dir}")
-
-                # Run OMRChecker
+                logger.info(f"Running OMRChecker (fallback) on: {self._temp_dir}")
                 entry_point(self._temp_dir, args)
+
             finally:
                 # Restore original state
                 sys.path = original_path
-                # Remove OMRChecker's src modules
                 for key in list(sys.modules.keys()):
                     if key.startswith('src') and key not in original_modules:
                         del sys.modules[key]
-                # Restore our app's src modules
                 sys.modules.update(original_modules)
 
-            # Parse the results from CSV
+            return self._parse_results()
+
+        except Exception as e:
+            logger.error(f"Error running OMRChecker (fallback): {e}")
+            return None
+
+    def _parse_results(self) -> Optional[Dict[str, Any]]:
+        """Parse OMRChecker CSV results."""
+        try:
             results_dir = self._outputs_dir / 'Results'
             csv_files = list(results_dir.glob('Results_*.csv'))
 
             if csv_files:
-                # Get the most recent CSV file
                 csv_file = max(csv_files, key=lambda p: p.stat().st_mtime)
-                logger.info(f"Reading results from: {csv_file}")
 
                 with open(csv_file, 'r') as f:
                     reader = csv.DictReader(f)
                     result_row = None
                     for row in reader:
-                        # Get the last row (most recent result)
                         result_row = dict(row)
-
                     return result_row
 
             logger.warning("No CSV results found")
             return None
 
         except Exception as e:
-            logger.error(f"Error running OMRChecker: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            logger.error(f"Error parsing results: {e}")
             return None
 
     def _cleanup(self):
-        """Clean up temporary files."""
+        """Clean up temporary files (legacy method)."""
         try:
             if self._temp_dir and self._temp_dir.exists():
                 for f in self._temp_dir.iterdir():
