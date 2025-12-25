@@ -9,9 +9,13 @@ import sys
 import shutil
 import csv
 import time
+import json
 import tempfile
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
+
+import cv2
+import numpy as np
 
 from src.models.candidate import Candidate
 from src.models.result import ProcessingResult
@@ -134,6 +138,7 @@ class OMRCheckerEngine:
     # Class-level batch state for optimization
     _batch_dir = None
     _batch_initialized = False
+    _template_dimensions = None  # (width, height) from template
 
     def __init__(self, template_path: Optional[str] = None):
         """
@@ -152,8 +157,49 @@ class OMRCheckerEngine:
         # Validate template exists
         self._validate_template()
 
+        # Load template dimensions for image normalization
+        self._load_template_dimensions()
+
         # Initialize OMRChecker modules ONCE
         _setup_omrchecker_imports()
+
+    def _load_template_dimensions(self) -> None:
+        """Load page dimensions from template.json."""
+        try:
+            with open(self.template_path, 'r') as f:
+                template = json.load(f)
+
+            if 'pageDimensions' in template:
+                dims = template['pageDimensions']
+                OMRCheckerEngine._template_dimensions = (dims[0], dims[1])
+                logger.info(f"Template dimensions: {OMRCheckerEngine._template_dimensions}")
+            else:
+                logger.warning("No dimensions in template")
+                OMRCheckerEngine._template_dimensions = None
+        except Exception as e:
+            logger.error(f"Failed to load template dimensions: {e}")
+            OMRCheckerEngine._template_dimensions = None
+
+    def _copy_template_files(self, dest_dir: Path) -> None:
+        """
+        Copy template files (template.json and reference image) to destination directory.
+
+        FeatureBasedAlignment handles image dimension normalization automatically,
+        so we just copy the template files as-is without any coordinate scaling.
+        """
+        # Copy template.json
+        shutil.copy2(self.template_path, dest_dir / 'template.json')
+
+        # Copy reference image for FeatureBasedAlignment (omr-filled.png)
+        reference_image = self.template_path.parent / 'omr-filled.png'
+        if reference_image.exists():
+            shutil.copy2(reference_image, dest_dir / 'omr-filled.png')
+            logger.debug(f"Copied reference image for alignment: {reference_image.name}")
+
+        # Copy config.json if exists
+        config_path = self.template_path.parent / 'config.json'
+        if config_path.exists():
+            shutil.copy2(config_path, dest_dir / 'config.json')
 
     def _validate_template(self) -> None:
         """Validate that required template files exist."""
@@ -186,7 +232,7 @@ class OMRCheckerEngine:
         """
         Initialize batch processing directory.
         Call once before processing multiple images.
-        Sets up template and config once for the entire batch.
+        Sets up template, reference image, and config once for the entire batch.
         """
         if OMRCheckerEngine._batch_initialized:
             return True
@@ -196,17 +242,11 @@ class OMRCheckerEngine:
             OMRCheckerEngine._batch_dir = WRITABLE_PATH / 'inputs' / '_batch_processing'
             OMRCheckerEngine._batch_dir.mkdir(parents=True, exist_ok=True)
 
-            # Copy template once
+            # Copy all template files (template.json, omr-filled.png, config.json)
             if self.template_path.exists():
-                shutil.copy2(self.template_path, OMRCheckerEngine._batch_dir / 'template.json')
-
-                # Copy config.json if exists
-                config_path = self.template_path.parent / 'config.json'
-                if config_path.exists():
-                    shutil.copy2(config_path, OMRCheckerEngine._batch_dir / 'config.json')
-
+                self._copy_template_files(OMRCheckerEngine._batch_dir)
                 OMRCheckerEngine._batch_initialized = True
-                logger.info("Batch processing initialized (template copied once)")
+                logger.info("Batch processing initialized (template and reference image copied)")
                 return True
             else:
                 logger.error(f"Template not found: {self.template_path}")
@@ -237,10 +277,10 @@ class OMRCheckerEngine:
         """
         Process a single OMR image using OMRChecker.
 
-        Optimized version:
-        - Uses pre-initialized batch directory
-        - Minimal file copying (just the image)
-        - Reuses loaded OMRChecker modules
+        Uses FeatureBasedAlignment preprocessor for automatic image alignment:
+        - Images of any dimension are automatically warped to match reference
+        - No manual coordinate scaling needed
+        - Reuses loaded OMRChecker modules for performance
 
         Args:
             image_path: Path to the OMR image
@@ -251,19 +291,15 @@ class OMRCheckerEngine:
         start_time = time.time()
 
         try:
-            # Ensure batch is initialized (auto-init if needed)
-            if not OMRCheckerEngine._batch_initialized:
-                if not self.initialize_batch():
-                    return ProcessingResult(
-                        success=False,
-                        error_message=f"Template not found: {self.template_path}",
-                        processing_time_ms=(time.time() - start_time) * 1000
-                    )
+            # Create a temporary directory for this image
+            self._temp_dir = WRITABLE_PATH / 'inputs' / '_processing'
+            self._temp_dir.mkdir(parents=True, exist_ok=True)
 
-            # Use batch directory (template already there)
-            self._temp_dir = OMRCheckerEngine._batch_dir
+            # Copy template files (FeatureBasedAlignment handles dimension normalization)
+            self._copy_template_files(self._temp_dir)
+            logger.info(f"Processing image: {Path(image_path).name}")
 
-            # Copy ONLY the image (template already in place)
+            # Copy the image to temp directory
             image_name = Path(image_path).name
             temp_image = self._temp_dir / image_name
             shutil.copy2(image_path, temp_image)
@@ -271,9 +307,8 @@ class OMRCheckerEngine:
             # Run OMRChecker (using pre-loaded modules)
             result_data = self._run_omrchecker_optimized()
 
-            # Remove just the processed image (keep template)
-            if temp_image.exists():
-                temp_image.unlink()
+            # Clean up temp files
+            self._cleanup_temp_files()
 
             if result_data:
                 logger.info(f"Successfully got result data for {image_path}")
@@ -304,6 +339,16 @@ class OMRCheckerEngine:
                 error_message=str(e),
                 processing_time_ms=(time.time() - start_time) * 1000
             )
+
+    def _cleanup_temp_files(self) -> None:
+        """Clean up temporary processing files."""
+        try:
+            if self._temp_dir and self._temp_dir.exists():
+                for f in self._temp_dir.iterdir():
+                    if f.is_file():
+                        f.unlink()
+        except Exception as e:
+            logger.warning(f"Temp file cleanup error: {e}")
 
     def _run_omrchecker_optimized(self) -> Optional[Dict[str, Any]]:
         """
@@ -425,16 +470,6 @@ class OMRCheckerEngine:
             logger.error(traceback.format_exc())
             return None
 
-    def _cleanup(self):
-        """Clean up temporary files (legacy method)."""
-        try:
-            if self._temp_dir and self._temp_dir.exists():
-                for f in self._temp_dir.iterdir():
-                    if f.is_file():
-                        f.unlink()
-                self._temp_dir.rmdir()
-        except Exception as e:
-            logger.warning(f"Cleanup error: {e}")
 
     def _convert_to_candidate(self, result_data: Dict[str, Any], source_image: str) -> Candidate:
         """Convert OMRChecker CSV row to Candidate model."""

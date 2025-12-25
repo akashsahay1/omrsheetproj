@@ -1,221 +1,114 @@
 {
-  "pageDimensions": [
-    2480,
-    3507
-  ],
-  "bubbleDimensions": [
-    28,
-    28
-  ],
+  "pageDimensions": [1360, 1928],
+  "bubbleDimensions": [14, 14],
   "preProcessors": [
     {
       "name": "Levels",
       "options": {
-        "low": 0.2,
-        "high": 0.98
+        "low": 0.35,
+        "high": 0.95
       }
     },
     {
       "name": "GaussianBlur",
       "options": {
-        "kSize": [
-          3,
-          3
-        ],
+        "kSize": [3, 3],
         "sigmaX": 0
       }
     }
   ],
   "customLabels": {
-    "Roll": [
-      "roll1..3"
-    ],
-    "SchoolCode": [
-      "school1..3"
-    ]
+    "Roll": ["roll1..3"],
+    "SchoolCode": ["school1..3"]
   },
   "fieldBlocks": {
     "CandidateName": {
-      "origin": [
-        220,
-        704
-      ],
-      "bubbleDimensions": [
-        20,
-        20
-      ],
-      "bubblesGap": 50,
-      "labelsGap": 52,
-      "fieldLabels": [
-        "name1..25"
-      ],
-      "bubbleValues": [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "G",
-        "H",
-        "I",
-        "J",
-        "K",
-        "L",
-        "M",
-        "N",
-        "O",
-        "P",
-        "Q",
-        "R",
-        "S",
-        "T",
-        "U",
-        "V",
-        "W",
-        "X",
-        "Y",
-        "Z"
-      ],
+      "origin": [116, 388],
+      "bubbleDimensions": [14, 14],
+      "fieldLabels": ["name1..25"],
+      "bubbleValues": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"],
+      "bubblesGap": 28,
+      "labelsGap": 31,
       "direction": "vertical"
     },
     "RollNumber": {
       "fieldType": "QTYPE_INT",
-      "origin": [
-        1624,
-        1278
-      ],
-      "bubblesGap": 54,
-      "labelsGap": 56,
-      "fieldLabels": [
-        "roll1..3"
-      ],
+      "origin": [883, 708],
+      "fieldLabels": ["roll1..3"],
+      "bubblesGap": 28,
+      "labelsGap": 31,
       "direction": "vertical"
     },
     "Class": {
-      "origin": [
-        1850,
-        1290
-      ],
-      "bubblesGap": 52,
-      "labelsGap": 56,
-      "fieldLabels": [
-        "class"
-      ],
+      "origin": [975, 708],
+      "fieldLabels": ["class"],
       "bubbleValues": ["3", "4", "5", "6", "7", "8", "9", "10"],
+      "bubblesGap": 28,
+      "labelsGap": 31,
       "direction": "vertical"
     },
     "Section": {
-      "origin": [
-        2003,
-        1290
-      ],
-      "bubblesGap": 52,
-      "labelsGap": 56,
-      "fieldLabels": [
-        "section"
-      ],
-      "bubbleValues": [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "G",
-        "H"
-      ],
+      "origin": [1035, 708],
+      "fieldLabels": ["section"],
+      "bubbleValues": ["A", "B", "C", "D", "E", "F", "G", "H"],
+      "bubblesGap": 28,
+      "labelsGap": 31,
       "direction": "vertical"
     },
     "SchoolCode": {
       "fieldType": "QTYPE_INT",
-      "origin": [
-        2146,
-        1278
-      ],
-      "bubblesGap": 54,
-      "labelsGap": 56,
-      "fieldLabels": [
-        "school1..3"
-      ],
+      "origin": [1095, 695],
+      "fieldLabels": ["school1..3"],
+      "bubblesGap": 28,
+      "labelsGap": 31,
       "direction": "vertical"
     },
     "Answers_1_10": {
       "fieldType": "QTYPE_MCQ4",
-      "origin": [
-        310,
-        2207
-      ],
-      "bubblesGap": 66,
-      "labelsGap": 92,
-      "fieldLabels": [
-        "q1..10"
-      ],
+      "origin": [161, 1211],
+      "fieldLabels": ["q1..10"],
+      "bubblesGap": 42,
+      "labelsGap": 51,
       "direction": "horizontal"
     },
     "Answers_11_20": {
       "fieldType": "QTYPE_MCQ4",
-      "origin": [
-        668,
-        2207
-      ],
-      "bubblesGap": 66,
-      "labelsGap": 92,
-      "fieldLabels": [
-        "q11..20"
-      ],
+      "origin": [351, 1211],
+      "fieldLabels": ["q11..20"],
+      "bubblesGap": 42,
+      "labelsGap": 51,
       "direction": "horizontal"
     },
     "Answers_21_30": {
       "fieldType": "QTYPE_MCQ4",
-      "origin": [
-        1027,
-        2207
-      ],
-      "bubblesGap": 66,
-      "labelsGap": 92,
-      "fieldLabels": [
-        "q21..30"
-      ],
+      "origin": [541, 1211],
+      "fieldLabels": ["q21..30"],
+      "bubblesGap": 42,
+      "labelsGap": 51,
       "direction": "horizontal"
     },
     "Answers_31_40": {
       "fieldType": "QTYPE_MCQ4",
-      "origin": [
-        1385,
-        2207
-      ],
-      "bubblesGap": 66,
-      "labelsGap": 92,
-      "fieldLabels": [
-        "q31..40"
-      ],
+      "origin": [731, 1211],
+      "fieldLabels": ["q31..40"],
+      "bubblesGap": 42,
+      "labelsGap": 51,
       "direction": "horizontal"
     },
     "Answers_41_50": {
       "fieldType": "QTYPE_MCQ4",
-      "origin": [
-        1744,
-        2207
-      ],
-      "bubblesGap": 66,
-      "labelsGap": 92,
-      "fieldLabels": [
-        "q41..50"
-      ],
+      "origin": [921, 1211],
+      "fieldLabels": ["q41..50"],
+      "bubblesGap": 42,
+      "labelsGap": 51,
       "direction": "horizontal"
     },
     "Answers_51_60": {
       "fieldType": "QTYPE_MCQ4",
-      "origin": [
-        2095,
-        2207
-      ],
-      "bubblesGap": 66,
-      "labelsGap": 92,
-      "fieldLabels": [
-        "q51..60"
-      ],
+      "origin": [1111, 1211],
+      "fieldLabels": ["q51..60"],
+      "bubblesGap": 42,
+      "labelsGap": 51,
       "direction": "horizontal"
     }
   }
