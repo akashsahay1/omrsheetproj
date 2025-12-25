@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <!--
+    VB OMR Scanner MSI Installer
+    Build with: candle Product.wxs && light -ext WixUIExtension Product.wixobj
+    -->
+
+    <Product Id="*"
+             Name="Vidya Bharti OMR Scanner"
+             Language="1033"
+             Version="1.0.0.0"
+             Manufacturer="Vidya Bharti"
+             UpgradeCode="A5D8E7B9-C4F2-4A1B-8D3E-6F9A2B1C0D5E">
+
+        <Package InstallerVersion="500"
+                 Compressed="yes"
+                 InstallScope="perMachine"
+                 Description="Vidya Bharti Pratibha Khoj and Pratibha Chayan OMR Scanner"
+                 Comments="OMR Sheet Scanner for Vidya Bharti examinations"
+                 Manufacturer="Vidya Bharti" />
+
+        <!-- Upgrade handling - removes previous versions -->
+        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+        <!-- Embed files in MSI -->
+        <MediaTemplate EmbedCab="yes" />
+
+        <!-- Features -->
+        <Feature Id="ProductFeature" Title="VB OMR Scanner" Level="1">
+            <ComponentGroupRef Id="ProductComponents" />
+            <ComponentRef Id="ApplicationShortcut" />
+            <ComponentRef Id="DesktopShortcut" />
+        </Feature>
+
+        <!-- UI -->
+        <UIRef Id="WixUI_InstallDir" />
+        <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
+        <!-- License -->
+        <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
+
+        <!-- Icon -->
+        <Icon Id="AppIcon.ico" SourceFile="..\assets\icon.ico" />
+        <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+        <Property Id="ARPHELPLINK" Value="https://www.vidyabharti.net" />
+
+    </Product>
+
+    <Fragment>
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="ProgramFilesFolder">
+                <Directory Id="INSTALLFOLDER" Name="VB OMR Scanner">
+                    <Directory Id="APPFOLDER" Name="." />
+                </Directory>
+            </Directory>
+            <Directory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsFolder" Name="VB OMR Scanner" />
+            </Directory>
+            <Directory Id="DesktopFolder" Name="Desktop" />
+        </Directory>
+    </Fragment>
+
+    <Fragment>
+        <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+            <!-- Main executable -->
+            <Component Id="MainExecutable" Guid="B2C3D4E5-F6A7-8B9C-0D1E-2F3A4B5C6D7E">
+                <File Id="VBOMRScanner.exe"
+                      Source="..\dist\VB OMR Scanner.exe"
+                      KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- Start Menu Shortcut -->
+        <DirectoryRef Id="ApplicationProgramsFolder">
+            <Component Id="ApplicationShortcut" Guid="C3D4E5F6-A7B8-9C0D-1E2F-3A4B5C6D7E8F">
+                <Shortcut Id="ApplicationStartMenuShortcut"
+                          Name="VB OMR Scanner"
+                          Description="Vidya Bharti OMR Scanner"
+                          Target="[INSTALLFOLDER]VB OMR Scanner.exe"
+                          WorkingDirectory="INSTALLFOLDER"
+                          Icon="AppIcon.ico" />
+                <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall" />
+                <RegistryValue Root="HKCU" Key="Software\VidyaBharti\OMRScanner" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+            </Component>
+        </DirectoryRef>
+
+        <!-- Desktop Shortcut -->
+        <DirectoryRef Id="DesktopFolder">
+            <Component Id="DesktopShortcut" Guid="D4E5F6A7-B8C9-0D1E-2F3A-4B5C6D7E8F9A">
+                <Shortcut Id="DesktopShortcut"
+                          Name="VB OMR Scanner"
+                          Description="Vidya Bharti OMR Scanner"
+                          Target="[INSTALLFOLDER]VB OMR Scanner.exe"
+                          WorkingDirectory="INSTALLFOLDER"
+                          Icon="AppIcon.ico" />
+                <RegistryValue Root="HKCU" Key="Software\VidyaBharti\OMRScanner" Name="desktop_shortcut" Type="integer" Value="1" KeyPath="yes" />
+            </Component>
+        </DirectoryRef>
+    </Fragment>
+</Wix>

@@ -6,7 +6,7 @@ Builds for macOS and Windows
 
 import sys
 import os
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_all
 
 # Application metadata
 APP_NAME = "Vidya Bharti Pratibha Khoj and Pratibha Chayan OMR Scanner"
@@ -32,10 +32,11 @@ datas = [
     (os.path.join(BASE_DIR, 'OMRChecker'), 'OMRChecker'),
 ]
 
+# Collect all webview submodules automatically
+webview_submodules = collect_submodules('webview')
+
 # Hidden imports that PyInstaller might miss
 hiddenimports = [
-    'pywebview',
-    'webview',
     'cv2',
     'numpy',
     'openpyxl',
@@ -71,6 +72,9 @@ hiddenimports = [
     'src.entry',
 ]
 
+# Add webview submodules
+hiddenimports.extend(webview_submodules)
+
 # Platform-specific hidden imports
 if is_macos:
     hiddenimports.extend([
@@ -84,18 +88,49 @@ elif is_windows:
     hiddenimports.extend([
         'webview.platforms.edgechromium',
         'webview.platforms.winforms',
+        'webview.platforms.mshtml',
+        'webview.platforms.cef',
         'clr',
+        'clr_loader',
+        'pythonnet',
+        'System',
+        'System.Windows.Forms',
+        'System.Drawing',
+        'System.Threading',
     ])
+    # Collect clr_loader and pythonnet data files for .NET integration
+    try:
+        clr_datas = collect_data_files('clr_loader')
+        datas.extend(clr_datas)
+    except Exception:
+        pass
+    try:
+        pythonnet_datas = collect_data_files('pythonnet')
+        datas.extend(pythonnet_datas)
+    except Exception:
+        pass
 
 # Collect numpy data files
 numpy_datas = collect_data_files('numpy')
 datas.extend(numpy_datas)
 
+# Collect webview data files (JS, HTML resources)
+webview_datas = collect_data_files('webview')
+datas.extend(webview_datas)
+
+# Collect OpenCV (cv2) - all data, binaries, and submodules
+cv2_datas, cv2_binaries, cv2_hiddenimports = collect_all('cv2')
+datas.extend(cv2_datas)
+hiddenimports.extend(cv2_hiddenimports)
+
+# Store cv2 binaries for later
+binaries = cv2_binaries
+
 # Analysis
 a = Analysis(
     [os.path.join(BASE_DIR, 'src', 'main.py')],
     pathex=[BASE_DIR, os.path.join(BASE_DIR, 'src')],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

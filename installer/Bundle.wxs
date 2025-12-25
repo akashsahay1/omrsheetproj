@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:bal="http://schemas.microsoft.com/wix/BalExtension"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+
+    <!--
+    VB OMR Scanner Offline Bootstrapper Bundle
+    Includes WebView2 Runtime for fully offline installation
+
+    Build with:
+    candle Bundle.wxs -ext WixBalExtension -ext WixUtilExtension
+    light Bundle.wixobj -ext WixBalExtension -ext WixUtilExtension -o VBOMRScanner-Setup.exe
+    -->
+
+    <Bundle Name="VB OMR Scanner"
+            Version="1.0.0.0"
+            Manufacturer="Vidya Bharti"
+            UpgradeCode="E7F8A9B0-C1D2-3E4F-5A6B-7C8D9E0F1A2B"
+            IconSourceFile="..\assets\icon.ico"
+            AboutUrl="https://www.vidyabharti.net"
+            HelpUrl="https://www.vidyabharti.net/support"
+            DisableModify="yes">
+
+        <!-- Use standard WiX bootstrapper UI -->
+        <BootstrapperApplicationRef Id="WixStandardBootstrapperApplication.RtfLicense">
+            <bal:WixStandardBootstrapperApplication
+                LicenseFile="license.rtf"
+                LogoFile="..\assets\icon_128.png"
+                SuppressOptionsUI="yes"
+                SuppressRepair="yes" />
+        </BootstrapperApplicationRef>
+
+        <!-- Define variables -->
+        <Variable Name="InstallFolder" Type="string" Value="[ProgramFilesFolder]VB OMR Scanner" />
+
+        <!-- Installation Chain -->
+        <Chain>
+
+            <!--
+            Microsoft WebView2 Runtime - OFFLINE Installer
+            Detects if already installed, skips if present
+            Installs silently if missing - NO INTERNET REQUIRED
+            -->
+
+            <!-- WebView2 for 64-bit systems -->
+            <ExePackage Id="WebView2RuntimeX64"
+                        Name="Microsoft Edge WebView2 Runtime (x64)"
+                        Cache="no"
+                        Compressed="yes"
+                        PerMachine="yes"
+                        Permanent="yes"
+                        Vital="yes"
+                        SourceFile="prereqs\MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+                        InstallCondition="VersionNT64"
+                        InstallCommand="/silent /install"
+                        RepairCommand="/silent /install"
+                        UninstallCommand=""
+                        DetectCondition="WebView2RuntimeX64Installed">
+
+                <!-- All exit codes are success (0=success, 1=already installed, etc.) -->
+                <ExitCode Value="0" Behavior="success" />
+                <ExitCode Value="1" Behavior="success" />
+                <ExitCode Behavior="success" />
+            </ExePackage>
+
+            <!-- WebView2 for 32-bit systems -->
+            <ExePackage Id="WebView2RuntimeX86"
+                        Name="Microsoft Edge WebView2 Runtime (x86)"
+                        Cache="no"
+                        Compressed="yes"
+                        PerMachine="yes"
+                        Permanent="yes"
+                        Vital="yes"
+                        SourceFile="prereqs\MicrosoftEdgeWebView2RuntimeInstallerX86.exe"
+                        InstallCondition="NOT VersionNT64"
+                        InstallCommand="/silent /install"
+                        RepairCommand="/silent /install"
+                        UninstallCommand=""
+                        DetectCondition="WebView2RuntimeX86Installed">
+
+                <ExitCode Value="0" Behavior="success" />
+                <ExitCode Value="1" Behavior="success" />
+                <ExitCode Behavior="success" />
+            </ExePackage>
+
+            <!-- Main Application MSI -->
+            <MsiPackage Id="MainApplication"
+                        SourceFile="..\dist\VBOMRScanner.msi"
+                        Vital="yes"
+                        DisplayInternalUI="no"
+                        Compressed="yes">
+                <MsiProperty Name="INSTALLFOLDER" Value="[InstallFolder]" />
+            </MsiPackage>
+
+        </Chain>
+
+        <!-- WebView2 Detection using registry -->
+        <!-- WebView2 registers in one of these locations when installed -->
+        <util:RegistrySearch Id="WebView2RuntimeX64Installed"
+                             Root="HKLM"
+                             Key="SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+                             Value="pv"
+                             Variable="WebView2VersionX64"
+                             Result="exists" />
+
+        <util:RegistrySearch Id="WebView2RuntimeX86Installed"
+                             Root="HKLM"
+                             Key="SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+                             Value="pv"
+                             Variable="WebView2VersionX86"
+                             Result="exists" />
+
+    </Bundle>
+
+</Wix>

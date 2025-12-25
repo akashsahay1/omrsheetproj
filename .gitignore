@@ -55,3 +55,17 @@ OMRChecker/inputs/_temp_processing/
 
 # Temp files
 /tmp/
+
+# Code signing certificates (keep private!)
+*.pfx
+*.p12
+cert_thumbprint.txt
+
+# WiX installer build artifacts
+installer/*.wixobj
+installer/*.wixpdb
+installer/prereqs/
+
+# Installer scripts (keep in repo)
+!create_cert.ps1
+!create_cert.bat
