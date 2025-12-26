@@ -281,7 +281,14 @@ class OMRApi:
         if batch_result.evaluation_results:
             for result in batch_result.evaluation_results:
                 if result.candidate:
+                    # Extract just the filename from source path
+                    source_file = ''
+                    if result.candidate.source_image:
+                        import os
+                        source_file = os.path.basename(result.candidate.source_image)
+
                     results_data.append({
+                        'filename': source_file,
                         'name': result.candidate.name,
                         'roll_number': result.candidate.roll_number,
                         'class': result.candidate.class_,
@@ -300,7 +307,14 @@ class OMRApi:
             logger.warning("No evaluation results, falling back to raw processing results")
             for result in batch_result.results:
                 if result.success and result.candidate:
+                    # Extract just the filename from source path
+                    source_file = ''
+                    if result.candidate.source_image:
+                        import os
+                        source_file = os.path.basename(result.candidate.source_image)
+
                     results_data.append({
+                        'filename': source_file,
                         'name': result.candidate.name,
                         'roll_number': result.candidate.roll_number,
                         'class': result.candidate.class_,

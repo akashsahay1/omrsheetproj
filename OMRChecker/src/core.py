@@ -351,11 +351,13 @@ class ImageInstanceOps:
                         )
                         # Only send rolls multi-marked in the directory
                         multi_marked_local = field_label in omr_response
-                        omr_response[field_label] = (
-                            (omr_response[field_label] + field_value)
-                            if multi_marked_local
-                            else field_value
-                        )
+                        if multi_marked_local:
+                            # Take first value (sorted alphabetically/numerically)
+                            existing = omr_response[field_label]
+                            sorted_values = sorted([existing, field_value])
+                            omr_response[field_label] = sorted_values[0]
+                        else:
+                            omr_response[field_label] = field_value
                         # TODO: generalize this into identifier
                         # multi_roll = multi_marked_local and "Roll" in str(q)
                         multi_marked = multi_marked or multi_marked_local

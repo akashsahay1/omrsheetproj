@@ -17,6 +17,22 @@
       "options": {
         "enabled": true
       }
+    },
+    {
+      "name": "FeatureBasedAlignment",
+      "options": {
+        "reference": "omr-filled.png",
+        "maxFeatures": 2000,
+        "goodMatchPercent": 0.2,
+        "2d": true
+      }
+    },
+    {
+      "name": "Levels",
+      "options": {
+        "low": 0.6,
+        "high": 0.85
+      }
     }
   ],
   "fieldBlocks": {
@@ -24,8 +40,8 @@
       "description": "Candidate name in block letters (25 characters max)",
       "fieldType": "QTYPE_ALPHA",
       "origin": [
-        186,
-        477
+        193,
+        690
       ],
       "fieldLabels": [
         "Name_1",
@@ -82,8 +98,8 @@
         "Y",
         "Z"
       ],
-      "bubblesGap": 28,
-      "labelsGap": 21,
+      "bubblesGap": 51,
+      "labelsGap": 54,
       "direction": "vertical"
     },
     "RollNumber": {
@@ -115,7 +131,7 @@
       "direction": "vertical"
     },
     "Class": {
-      "description": "Class (0-9)",
+      "description": "Class (3-10)",
       "fieldType": "QTYPE_INT",
       "origin": [
         1792,
@@ -125,16 +141,14 @@
         "Class"
       ],
       "bubbleValues": [
-        "0",
-        "1",
-        "2",
         "3",
         "4",
         "5",
         "6",
         "7",
         "8",
-        "9"
+        "9",
+        "10"
       ],
       "bubblesGap": 54,
       "labelsGap": 56,
@@ -165,7 +179,7 @@
       "direction": "vertical"
     },
     "SchoolCode": {
-      "description": "4-digit school code",
+      "description": "3-digit school code",
       "fieldType": "QTYPE_INT",
       "origin": [
         1904,
@@ -174,8 +188,7 @@
       "fieldLabels": [
         "School_D1",
         "School_D2",
-        "School_D3",
-        "School_D4"
+        "School_D3"
       ],
       "bubbleValues": [
         "0",

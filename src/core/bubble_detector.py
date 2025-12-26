@@ -177,7 +177,9 @@ class BubbleDetector:
                                      if b.fill_ratio >= self.min_fill_ratio]
 
                 if len(significant_fills) > 1:
-                    detected_values[label] = "MULTI"
+                    # Sort by value and take first (A before B, 0 before 1)
+                    sorted_fills = sorted(significant_fills, key=lambda b: b.value)
+                    detected_values[label] = sorted_fills[0].value
                 else:
                     detected_values[label] = best.value
 

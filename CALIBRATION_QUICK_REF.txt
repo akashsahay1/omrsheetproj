@@ -1,0 +1,65 @@
+===============================================================================
+           VIDYA BHARTI 2025 OMR TEMPLATE - QUICK REFERENCE
+===============================================================================
+
+Template Dimensions: 1360 x 1928 pixels
+Bubble Size: 14 x 14 pixels
+
+-------------------------------------------------------------------------------
+                         CALIBRATED COORDINATES
+-------------------------------------------------------------------------------
+
+Field           Origin (x, y)    Gap (bubbles)   Gap (labels)   Direction
+-------------------------------------------------------------------------------
+CandidateName   [105, 387]       28              31             vertical
+RollNumber      [874, 712]       28              31             vertical
+Class           [992, 712]       28              31             vertical
+Section         [1075, 712]      28              31             vertical
+SchoolCode      [1165, 712]      28              31             vertical
+
+Answers_1_10    [161, 1211]      42              51             horizontal
+Answers_11_20   [351, 1211]      42              51             horizontal
+Answers_21_30   [541, 1211]      42              51             horizontal
+Answers_31_40   [731, 1211]      42              51             horizontal
+Answers_41_50   [921, 1211]      42              51             horizontal
+Answers_51_60   [1111, 1211]     42              51             horizontal
+
+-------------------------------------------------------------------------------
+                            FIELD VALUES
+-------------------------------------------------------------------------------
+
+CandidateName:  A-Z (26 letters per column, 25 columns)
+RollNumber:     0-9 (3 digits: roll1, roll2, roll3)
+Class:          3, 4, 5, 6, 7, 8, 9, 10
+Section:        A, B, C, D, E, F, G, H
+SchoolCode:     0-9 (3 digits: school1, school2, school3)
+Answers:        A, B, C, D (MCQ4)
+
+-------------------------------------------------------------------------------
+                         DETECTION ACCURACY
+-------------------------------------------------------------------------------
+
+Roll Number:    100%
+Class:          100%
+Section:        100%
+School Code:    100%
+Candidate Name: 70-90%
+
+-------------------------------------------------------------------------------
+                      RECALIBRATION INSTRUCTIONS
+-------------------------------------------------------------------------------
+
+1. Resize OMR image to 1360x1928 pixels
+2. Open in PixSpy (or similar pixel coordinate tool)
+3. Measure top-left corner of first bubble for each field
+4. Update origin values in template.json
+
+Template files:
+  - OMRChecker/inputs/VidyaBharti2025/template.json
+  - OMRChecker/inputs/_test_final/template.json
+
+Full documentation: docs/TEMPLATE_CALIBRATION.md
+
+===============================================================================
+                    Calibrated: December 26, 2025
+===============================================================================

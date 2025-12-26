@@ -291,6 +291,9 @@ class OMRCheckerEngine:
         start_time = time.time()
 
         try:
+            # Clear previous results to prevent accumulation
+            self._clear_results_directory()
+
             # Create a temporary directory for this image
             self._temp_dir = WRITABLE_PATH / 'inputs' / '_processing'
             self._temp_dir.mkdir(parents=True, exist_ok=True)
@@ -305,7 +308,8 @@ class OMRCheckerEngine:
             shutil.copy2(image_path, temp_image)
 
             # Run OMRChecker (using pre-loaded modules)
-            result_data = self._run_omrchecker_optimized()
+            # Pass the image filename so we can match the correct row in CSV
+            result_data = self._run_omrchecker_optimized(image_name)
 
             # Clean up temp files
             self._cleanup_temp_files()
@@ -350,17 +354,36 @@ class OMRCheckerEngine:
         except Exception as e:
             logger.warning(f"Temp file cleanup error: {e}")
 
-    def _run_omrchecker_optimized(self) -> Optional[Dict[str, Any]]:
+    def _clear_results_directory(self) -> None:
+        """Clear the Results directory before processing each image.
+
+        This prevents result accumulation from previous runs which causes
+        the parser to read stale/wrong results.
+        """
+        try:
+            results_dir = self._outputs_dir / 'Results'
+            if results_dir.exists():
+                for f in results_dir.iterdir():
+                    if f.is_file() and f.suffix == '.csv':
+                        f.unlink()
+                        logger.debug(f"Cleared old results file: {f.name}")
+        except Exception as e:
+            logger.warning(f"Results cleanup error: {e}")
+
+    def _run_omrchecker_optimized(self, image_filename: str = None) -> Optional[Dict[str, Any]]:
         """
         Run OMRChecker using pre-loaded modules (OPTIMIZED).
         Skips module import/unload cycle - saves ~3-5 seconds per image.
+
+        Args:
+            image_filename: The filename of the image being processed (for result matching)
         """
         global _omrchecker_entry_point
 
         try:
             if not _omrchecker_modules_loaded or _omrchecker_entry_point is None:
                 logger.error("OMRChecker modules not loaded!")
-                return self._run_omrchecker_fallback()
+                return self._run_omrchecker_fallback(image_filename)
 
             # Prepare arguments
             args = {
@@ -373,17 +396,17 @@ class OMRCheckerEngine:
             # Run OMRChecker using pre-loaded entry point
             _omrchecker_entry_point(self._temp_dir, args)
 
-            # Parse the results from CSV
-            return self._parse_results()
+            # Parse the results from CSV, matching by filename
+            return self._parse_results(image_filename)
 
         except Exception as e:
             logger.error(f"Error running OMRChecker (optimized): {e}")
             import traceback
             logger.error(traceback.format_exc())
             # Fall back to traditional method
-            return self._run_omrchecker_fallback()
+            return self._run_omrchecker_fallback(image_filename)
 
-    def _run_omrchecker_fallback(self) -> Optional[Dict[str, Any]]:
+    def _run_omrchecker_fallback(self, image_filename: str = None) -> Optional[Dict[str, Any]]:
         """Fallback method - reloads modules each time (slower but reliable)."""
         try:
             # Save original sys.path and sys.modules state
@@ -420,14 +443,19 @@ class OMRCheckerEngine:
                         del sys.modules[key]
                 sys.modules.update(original_modules)
 
-            return self._parse_results()
+            return self._parse_results(image_filename)
 
         except Exception as e:
             logger.error(f"Error running OMRChecker (fallback): {e}")
             return None
 
-    def _parse_results(self) -> Optional[Dict[str, Any]]:
-        """Parse OMRChecker CSV results."""
+    def _parse_results(self, image_filename: str = None) -> Optional[Dict[str, Any]]:
+        """Parse OMRChecker CSV results.
+
+        Args:
+            image_filename: If provided, find the row matching this filename.
+                          Otherwise returns the last row (legacy behavior).
+        """
         try:
             results_dir = self._outputs_dir / 'Results'
             logger.info(f"Looking for results in: {results_dir}")
@@ -443,19 +471,35 @@ class OMRCheckerEngine:
             if csv_files:
                 csv_file = max(csv_files, key=lambda p: p.stat().st_mtime)
                 logger.info(f"Using most recent CSV file: {csv_file}")
+                logger.info(f"Looking for image: {image_filename}")
 
                 with open(csv_file, 'r') as f:
                     reader = csv.DictReader(f)
                     result_row = None
+                    matched_row = None
                     row_count = 0
+
                     for row in reader:
                         result_row = dict(row)
                         row_count += 1
 
+                        # Match by filename if provided (column is 'file_id' in CSV)
+                        if image_filename:
+                            row_filename = row.get('file_id', '')
+                            if row_filename == image_filename:
+                                matched_row = dict(row)
+                                logger.info(f"Found matching row for {image_filename}")
+
                     logger.info(f"Parsed {row_count} rows from CSV")
-                    if result_row:
-                        logger.info(f"Last row keys: {list(result_row.keys())[:10]}...")
-                    return result_row
+
+                    # Return matched row if found, otherwise fallback to last row
+                    if matched_row:
+                        logger.info(f"Returning matched row for: {image_filename}")
+                        return matched_row
+                    elif result_row:
+                        logger.warning(f"No matching row found for {image_filename}, "
+                                      f"returning last row (file_id={result_row.get('file_id', 'unknown')})")
+                        return result_row
 
             logger.warning(f"No CSV results found in {results_dir}")
             # List what's in the outputs directory
@@ -470,6 +514,71 @@ class OMRCheckerEngine:
             logger.error(traceback.format_exc())
             return None
 
+
+    def _clean_detected_name(self, raw_name: str) -> str:
+        """Clean up detected name by removing spurious characters.
+
+        Common issues:
+        - Trailing 'W' characters from false positives in the W row
+        - Multiple consecutive same letters (unlikely in real names)
+        - Single isolated characters at the end
+        - Noise characters appearing at specific column positions
+
+        Args:
+            raw_name: The raw detected name
+
+        Returns:
+            Cleaned name string
+        """
+        import re
+
+        if not raw_name:
+            return raw_name
+
+        name = raw_name
+
+        # Step 1: Remove trailing W's (common false positive)
+        # Pattern: one or more W's at the end, possibly with spaces before
+        name = re.sub(r'\s*W+\s*$', '', name)
+
+        # Step 2: Remove W attached to end of words (like "KUMARW")
+        # This catches cases where W is falsely detected right after the last letter
+        name = re.sub(r'([A-VX-Z])W(\s|$)', r'\1\2', name)
+
+        # Step 3: Remove multiple consecutive same letters (2+ in a row) for W and M
+        # These are commonly falsely detected. Keep doubles only for other letters.
+        name = re.sub(r'W{2,}', '', name)  # Remove WW, WWW, WWWW etc
+        name = re.sub(r'M{2,}', 'M', name)  # Keep only one M
+
+        # Step 4: Remove other multiple consecutive same letters (3+ in a row)
+        # This catches patterns like "LLL" which are unlikely in names
+        def remove_triple_plus(match):
+            char = match.group(1)
+            return char * 2
+        name = re.sub(r'([A-LN-VX-Z])\1{2,}', remove_triple_plus, name)
+
+        # Step 5: Remove noise patterns like "WM", "MW" which are unlikely combinations
+        # after spaces (indicates detection of non-filled bubbles)
+        name = re.sub(r'\s+[WM]{2,}', '', name)
+
+        # Step 6: Remove isolated single characters at the end after multiple spaces
+        name = re.sub(r'\s{2,}[A-Z]$', '', name)
+
+        # Step 7: Clean up excessive internal spaces
+        name = re.sub(r'\s{3,}', '  ', name)  # Max 2 spaces between words
+
+        # Step 8: Clean trailing single letters after space at very end
+        # (like "KUMAR K" where K is noise)
+        name = re.sub(r'\s+[JKWM]$', '', name)
+
+        # Step 9: Final strip and cleanup
+        name = name.strip()
+
+        # Remove any remaining trailing single space + letter combinations
+        while re.search(r'\s{2,}[A-Z]$', name):
+            name = re.sub(r'\s{2,}[A-Z]$', '', name).strip()
+
+        return name
 
     def _convert_to_candidate(self, result_data: Dict[str, Any], source_image: str) -> Candidate:
         """Convert OMRChecker CSV row to Candidate model."""
@@ -488,6 +597,9 @@ class OMRCheckerEngine:
                     char = str(result_data[key]).strip() if result_data[key] else ''
                     if char:
                         # Valid character detected
+                        # Handle multi-mark: take first letter only
+                        if len(char) > 1:
+                            char = char[0]
                         name_chars.append(char)
                     else:
                         # Empty/blank column - treat as space
@@ -499,12 +611,17 @@ class OMRCheckerEngine:
             # Join all characters and strip trailing spaces only
             # This preserves internal spaces while removing trailing blanks
             full_name = ''.join(name_chars)
-            candidate.name = full_name.rstrip()
+            raw_name = full_name.rstrip()
+
+            # Clean up spurious detections
+            candidate.name = self._clean_detected_name(raw_name)
 
             logger.debug(f"Name extraction: raw chars = {name_chars}")
-            logger.debug(f"Name extraction: final name = '{candidate.name}'")
+            logger.debug(f"Name extraction: raw name = '{raw_name}'")
+            logger.debug(f"Name extraction: cleaned name = '{candidate.name}'")
         elif 'CandidateName' in result_data:
-            candidate.name = str(result_data['CandidateName']).strip()
+            raw_name = str(result_data['CandidateName']).strip()
+            candidate.name = self._clean_detected_name(raw_name)
         else:
             candidate.name = ''
 

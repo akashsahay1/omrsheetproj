@@ -36,7 +36,12 @@ def get_concatenated_response(omr_response, template):
     # Multi-column/multi-row questions which need to be concatenated
     concatenated_response = {}
     for field_label, concatenate_keys in template.custom_labels.items():
-        custom_label = "".join([omr_response[k] for k in concatenate_keys])
+        # For numeric fields (Roll, SchoolCode), use "0" for empty values
+        # to ensure proper digit count
+        if field_label in ("Roll", "SchoolCode"):
+            custom_label = "".join([omr_response[k] if omr_response[k] else "0" for k in concatenate_keys])
+        else:
+            custom_label = "".join([omr_response[k] for k in concatenate_keys])
         concatenated_response[field_label] = custom_label
 
     for field_label in template.non_custom_labels:

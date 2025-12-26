@@ -12,7 +12,7 @@ const AppState = {
     isProcessing: false,
     results: [],
     progressInterval: null,
-    examLevel: 'Anshik',
+    examLevel: 'Prarambhik',
     examType: 'Chayan'
 };
 
@@ -380,6 +380,7 @@ async function loadResults() {
 
             row.innerHTML = `
                 <td>${r.rank}</td>
+                <td class="filename-cell" title="${r.filename || ''}">${r.filename || ''}</td>
                 <td>${r.name}</td>
                 <td>${r.roll_number}</td>
                 <td>${r.class}</td>

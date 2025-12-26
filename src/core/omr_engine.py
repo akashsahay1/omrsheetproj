@@ -198,20 +198,26 @@ class OMREngine:
         values = self.bubble_detector.detect_marked_value(image, coords)
 
         # Build name from detected characters
+        # Empty column = space (for "FIRST LAST" names)
         name_chars = []
+        trailing_spaces = 0
+
         for i in range(1, SheetConfig.NAME_COLUMNS + 1):
             label = f'Name_{i}'
             char = values.get(label, '')
 
             if char and char != MULTI_MARK_VALUE:
+                # Add any pending spaces before this character
+                if trailing_spaces > 0 and name_chars:
+                    name_chars.append(' ')
+                    trailing_spaces = 0
                 name_chars.append(char)
             elif not char:
-                # Stop at first empty position (end of name)
-                # But allow spaces in the middle
-                if name_chars and all(c == '' for c in name_chars[-3:] if c == ''):
-                    break
+                # Empty column = potential space between words
+                if name_chars:  # Only count spaces after we've started the name
+                    trailing_spaces += 1
 
-        # Join and clean name
+        # Join and clean name (strip trailing spaces)
         name = ''.join(name_chars).strip()
 
         logger.debug(f"Extracted name: '{name}'")
@@ -273,7 +279,7 @@ class OMREngine:
         return section
 
     def _extract_school_code(self, image: np.ndarray) -> str:
-        """Extract 4-digit school code"""
+        """Extract 3-digit school code"""
         field_block = self.template.get_field_block('SchoolCode')
 
         if field_block is None:
@@ -282,9 +288,9 @@ class OMREngine:
         coords = field_block.get_bubble_coordinates()
         values = self.bubble_detector.detect_marked_value(image, coords)
 
-        # Build school code
+        # Build school code (3 digits)
         digits = []
-        for i, label in enumerate(['School_D1', 'School_D2', 'School_D3', 'School_D4']):
+        for i, label in enumerate(['School_D1', 'School_D2', 'School_D3']):
             digit = values.get(label, '')
             if digit and digit != MULTI_MARK_VALUE:
                 digits.append(digit)
