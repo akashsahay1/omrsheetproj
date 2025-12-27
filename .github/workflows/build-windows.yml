@@ -25,12 +25,17 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller pyinstaller-hooks-contrib
+          # Core dependencies
           pip install opencv-python numpy pandas pywebview openpyxl Pillow jsonschema rich matplotlib dotmap deepmerge screeninfo
+          # ML/AI dependencies for name detection (CPU-only PyTorch for faster build)
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install easyocr
 
       - name: Build Windows executable
         run: |
@@ -53,5 +58,18 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: dist/*.exe
+          body: |
+            ## VB OMR Scanner ${{ github.ref_name }}
+
+            ### Features
+            - AI-powered name detection using bubble grid recognition
+            - EasyOCR fallback for handwritten names
+            - Batch OMR sheet processing
+            - Excel export with scoring and rankings
+
+            ### Installation
+            1. Download `VB OMR Scanner.exe`
+            2. Run the executable (no installation required)
+            3. Or use the MSI installer for system-wide installation
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
