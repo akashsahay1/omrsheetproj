@@ -1,0 +1,1198 @@
+[
+  {
+    "filename": "41_629.jpg",
+    "ground_truth": "REYANSH KUMAR",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "Y",
+        "R",
+        "S",
+        "N",
+        "A",
+        "E",
+        "M",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_632.jpg",
+    "ground_truth": "YUVRAJ KUMAR MANDAL",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "V",
+        "U",
+        "Y",
+        "R",
+        "D",
+        "N",
+        "L",
+        "A",
+        "J",
+        "M",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_635.jpg",
+    "ground_truth": "ANJALI KUMARI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "R",
+        "N",
+        "L",
+        "A",
+        "J",
+        "K",
+        "M",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_637.jpg",
+    "ground_truth": "ROSHAN RAJWAR",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "O",
+        "R",
+        "S",
+        "N",
+        "W",
+        "A",
+        "J",
+        "H"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_642.jpg",
+    "ground_truth": "SIMANDHYA KUMARI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "H",
+        "U",
+        "Y",
+        "R",
+        "S",
+        "D",
+        "N",
+        "A",
+        "K",
+        "M",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_643.jpg",
+    "ground_truth": "RAJ KUMAR",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "A",
+        "J",
+        "U",
+        "R",
+        "M",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_645.jpg",
+    "ground_truth": "ADJNSH KUMAR NAHTO",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "O",
+        "T",
+        "R",
+        "S",
+        "D",
+        "N",
+        "A",
+        "J",
+        "M",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_646.jpg",
+    "ground_truth": "RAM KUMAR RAWANI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "R",
+        "N",
+        "I",
+        "W",
+        "A",
+        "M",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_648.jpg",
+    "ground_truth": "AYUSH KUMAR YADAV",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "V",
+        "Y",
+        "R",
+        "S",
+        "D",
+        "A",
+        "M",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_649.jpg",
+    "ground_truth": "SRISHTI PRIYA",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "T",
+        "Y",
+        "R",
+        "S",
+        "A",
+        "P",
+        "H",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_650.jpg",
+    "ground_truth": "SAKSHAM KUMARI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "H",
+        "U",
+        "R",
+        "S",
+        "I",
+        "A",
+        "M",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_667.jpg",
+    "ground_truth": "SREPTI SHARMA",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "T",
+        "R",
+        "S",
+        "A",
+        "E",
+        "M",
+        "P",
+        "H",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_672.jpg",
+    "ground_truth": "MOHIT KUMAR DAS",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "O",
+        "T",
+        "R",
+        "K",
+        "S",
+        "D",
+        "A",
+        "M",
+        "H",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_676.jpg",
+    "ground_truth": "RONAK KUMAR MANDAL",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "O",
+        "R",
+        "D",
+        "N",
+        "L",
+        "A",
+        "M",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_679.jpg",
+    "ground_truth": "PRINCE KUMAR MANDAL",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "R",
+        "D",
+        "N",
+        "L",
+        "A",
+        "C",
+        "E",
+        "K",
+        "P",
+        "M",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_682.jpg",
+    "ground_truth": "PRINCE KUMAR MANDAL",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "R",
+        "D",
+        "N",
+        "L",
+        "A",
+        "C",
+        "E",
+        "K",
+        "P",
+        "M",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_686.jpg",
+    "ground_truth": "AJIT KUMAR YADAV",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "V",
+        "T",
+        "Y",
+        "R",
+        "D",
+        "I",
+        "A",
+        "J",
+        "M",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_687.jpg",
+    "ground_truth": "SUMIT KUMAR TURI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "T",
+        "R",
+        "S",
+        "A",
+        "K",
+        "M",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_702.jpg",
+    "ground_truth": "SAGAR KUMAR MANDAL",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "R",
+        "S",
+        "D",
+        "N",
+        "L",
+        "G",
+        "A",
+        "M",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_705.jpg",
+    "ground_truth": "ISHWAR KUMAR",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "R",
+        "S",
+        "W",
+        "A",
+        "M",
+        "K",
+        "H",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_724.jpg",
+    "ground_truth": "ADARSH KUMAR",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "R",
+        "S",
+        "D",
+        "A",
+        "M",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_726.jpg",
+    "ground_truth": "SRISHTI SEN",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "E",
+        "T",
+        "R",
+        "S",
+        "N",
+        "H",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_739.jpg",
+    "ground_truth": "SONAKSHI KUMARI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "O",
+        "R",
+        "S",
+        "N",
+        "I",
+        "A",
+        "M",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_742.jpg",
+    "ground_truth": "KHUSHBU KUMARI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "B",
+        "R",
+        "S",
+        "I",
+        "A",
+        "M",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_744.jpg",
+    "ground_truth": "PIHU KUMARI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "R",
+        "I",
+        "A",
+        "M",
+        "P",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_749.jpg",
+    "ground_truth": "ASHISH KUMAR MANDAL",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "R",
+        "S",
+        "D",
+        "N",
+        "I",
+        "L",
+        "A",
+        "M",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_752.jpg",
+    "ground_truth": "KHUSHOV MARANDI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "O",
+        "V",
+        "R",
+        "S",
+        "D",
+        "N",
+        "I",
+        "A",
+        "M",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_753.jpg",
+    "ground_truth": "JAYASH PRAKHAR",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "Y",
+        "R",
+        "S",
+        "A",
+        "J",
+        "P",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_756.jpg",
+    "ground_truth": "UMA SIMHA",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "A",
+        "U",
+        "S",
+        "M",
+        "H",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_760.jpg",
+    "ground_truth": "RAVINDRA PAL",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "V",
+        "R",
+        "D",
+        "N",
+        "L",
+        "A",
+        "P",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_768.jpg",
+    "ground_truth": "KAVYA KUMARI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "V",
+        "U",
+        "Y",
+        "R",
+        "I",
+        "A",
+        "M",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_770.jpg",
+    "ground_truth": "ANUPA KUSHWAHA",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "S",
+        "N",
+        "W",
+        "A",
+        "P",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_771.jpg",
+    "ground_truth": "SHRISHTI KUMARI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "T",
+        "R",
+        "S",
+        "A",
+        "M",
+        "K",
+        "H",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_783.jpg",
+    "ground_truth": "PRINCE KUMAR",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "R",
+        "N",
+        "A",
+        "C",
+        "E",
+        "K",
+        "P",
+        "M",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_784.jpg",
+    "ground_truth": "ANKIT KUMAR",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "T",
+        "R",
+        "N",
+        "A",
+        "K",
+        "M",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_785.jpg",
+    "ground_truth": "SHASHI KUMARI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "R",
+        "S",
+        "I",
+        "A",
+        "M",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_793.jpg",
+    "ground_truth": "LADALI KHAN",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "A",
+        "K",
+        "D",
+        "N",
+        "L",
+        "H",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_795.jpg",
+    "ground_truth": "SHRISHTI KUMARI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "T",
+        "R",
+        "S",
+        "A",
+        "M",
+        "K",
+        "H",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_798.jpg",
+    "ground_truth": "SARA ARFIN",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "A",
+        "F",
+        "R",
+        "S",
+        "N",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_810.jpg",
+    "ground_truth": "KAUSHAL YADAV",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "V",
+        "Y",
+        "S",
+        "D",
+        "L",
+        "A",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_815.jpg",
+    "ground_truth": "AKSHAY KUMAR",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "Y",
+        "R",
+        "S",
+        "A",
+        "M",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_820.jpg",
+    "ground_truth": "PRATIK SONI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "O",
+        "T",
+        "R",
+        "S",
+        "N",
+        "A",
+        "K",
+        "P",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_826.jpg",
+    "ground_truth": "RENU KUMARI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "R",
+        "N",
+        "I",
+        "A",
+        "E",
+        "M",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_830.jpg",
+    "ground_truth": "JIVIKA KUMARI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "V",
+        "U",
+        "R",
+        "I",
+        "A",
+        "J",
+        "M",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_841.jpg",
+    "ground_truth": "TRISHA SONI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "O",
+        "T",
+        "R",
+        "S",
+        "N",
+        "A",
+        "H",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_850.jpg",
+    "ground_truth": "FAIZAN RAJA",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "A",
+        "J",
+        "F",
+        "R",
+        "Z",
+        "N",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_860.jpg",
+    "ground_truth": "SNEHA KUMARI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "R",
+        "S",
+        "N",
+        "I",
+        "A",
+        "E",
+        "M",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_870.jpg",
+    "ground_truth": "SNEHA KUMARI",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "U",
+        "R",
+        "S",
+        "N",
+        "I",
+        "A",
+        "E",
+        "M",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_880.jpg",
+    "ground_truth": "IMRAN KHAN",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "A",
+        "M",
+        "R",
+        "N",
+        "I",
+        "H",
+        "K"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  },
+  {
+    "filename": "41_890.jpg",
+    "ground_truth": "VISHAL KUMAR",
+    "detected": "",
+    "similarity": 0.0,
+    "status": "WRONG",
+    "errors": {
+      "missing_chars": [
+        "V",
+        "U",
+        "R",
+        "S",
+        "L",
+        "A",
+        "M",
+        "K",
+        "H",
+        "I"
+      ],
+      "extra_chars": [],
+      "wrong_chars": [],
+      "truncated": true,
+      "partial_match": false
+    }
+  }
+]

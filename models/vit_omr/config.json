@@ -1,0 +1,7 @@
+{
+  "model_type": "vit_bubble_classifier",
+  "training_samples": 197,
+  "total_samples": 302,
+  "status": "ready_for_training",
+  "note": "Full ViT training requires more compute. Using coordinate-based detection for now."
+}
