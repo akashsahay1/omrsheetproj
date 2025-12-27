@@ -142,6 +142,51 @@
     visibility: visible;
 }
 
+/* Sortable Table Headers */
+.sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    white-space: nowrap;
+}
+
+.sortable:hover {
+    background: rgba(68, 114, 196, 0.1);
+}
+
+.sortable .sort-icon {
+    margin-left: 5px;
+    opacity: 0.5;
+    font-size: 0.85em;
+}
+
+.sortable:hover .sort-icon {
+    opacity: 1;
+}
+
+.sortable.sort-asc .sort-icon,
+.sortable.sort-desc .sort-icon {
+    opacity: 1;
+    color: var(--primary-color);
+}
+
+/* Confidence Score Colors */
+.conf-high {
+    color: #2e7d32;
+    font-weight: 500;
+}
+
+.conf-medium {
+    color: #f57c00;
+    font-weight: 500;
+}
+
+.conf-low {
+    color: #c62828;
+    font-weight: 600;
+    background: #ffebee;
+}
+
 /* Result Row Highlight */
 .result-row {
     cursor: pointer;

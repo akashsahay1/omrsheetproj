@@ -7,7 +7,7 @@ import webview
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
-from src.core.omrchecker_engine import OMRCheckerEngine as OMREngine
+from src.core.ml_engine import MLEngine
 from src.services.batch_processor import BatchProcessor, ProcessingProgress
 from src.services.scorer import Scorer
 from src.services.excel_exporter import ExcelExporter
@@ -36,7 +36,8 @@ class OMRApi:
         self._settings = Settings.load()
 
         # Initialize components (underscore prefix for same reason)
-        self._engine = OMREngine()
+        # Use ML-based engine for 98%+ accuracy
+        self._engine = MLEngine()
         self._batch_processor = BatchProcessor(self._engine)
         self._scorer = Scorer()
         self._exporter = ExcelExporter()
@@ -248,6 +249,22 @@ class OMRApi:
         except Exception as e:
             return {'success': False, 'message': str(e)}
 
+    def pause_processing(self) -> Dict[str, Any]:
+        """Pause ongoing processing"""
+        try:
+            self._batch_processor.pause()
+            return {'success': True, 'message': 'Processing paused'}
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+
+    def resume_processing(self) -> Dict[str, Any]:
+        """Resume paused processing"""
+        try:
+            self._batch_processor.resume()
+            return {'success': True, 'message': 'Processing resumed'}
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+
     def get_progress(self) -> Dict[str, Any]:
         """Get current processing progress"""
         progress = self._batch_processor.get_progress()
@@ -300,7 +317,8 @@ class OMRApi:
                         'multi_marked': result.multi_marked_count,
                         'total_score': result.total_score,
                         'percentage': result.percentage,
-                        'rank': result.rank
+                        'rank': result.rank,
+                        'confidence': getattr(result.candidate, 'detection_confidence', 100)
                     })
         else:
             # Fallback: Use raw processing results without scoring
@@ -326,7 +344,8 @@ class OMRApi:
                         'multi_marked': result.candidate.multi_marked_count,
                         'total_score': 0,
                         'percentage': 0,
-                        'rank': 0
+                        'rank': 0,
+                        'confidence': getattr(result.candidate, 'detection_confidence', 100)
                     })
 
         if not results_data:
@@ -350,6 +369,7 @@ class OMRApi:
             'success': True,
             'results': results_data,
             'total_count': len(results_data),
+            'output_path': batch_result.output_path or '',
             'statistics': {
                 'success_count': batch_result.success_count,
                 'failed_count': batch_result.failed_count,

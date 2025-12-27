@@ -516,13 +516,7 @@ class OMRCheckerEngine:
 
 
     def _clean_detected_name(self, raw_name: str) -> str:
-        """Clean up detected name by removing spurious characters.
-
-        Common issues:
-        - Trailing 'W' characters from false positives in the W row
-        - Multiple consecutive same letters (unlikely in real names)
-        - Single isolated characters at the end
-        - Noise characters appearing at specific column positions
+        """Clean up detected name by removing spurious characters and adding spaces.
 
         Args:
             raw_name: The raw detected name
@@ -535,48 +529,146 @@ class OMRCheckerEngine:
         if not raw_name:
             return raw_name
 
-        name = raw_name
+        name = raw_name.strip().upper()
 
-        # Step 1: Remove trailing W's (common false positive)
-        # Pattern: one or more W's at the end, possibly with spaces before
-        name = re.sub(r'\s*W+\s*$', '', name)
+        # Remove all spaces first to normalize, then re-add correctly
+        name_no_space = name.replace(' ', '')
 
-        # Step 2: Remove W attached to end of words (like "KUMARW")
-        # This catches cases where W is falsely detected right after the last letter
-        name = re.sub(r'([A-VX-Z])W(\s|$)', r'\1\2', name)
+        # Comprehensive list of Indian surnames - KUMARI before KUMAR for proper matching
+        # Pre-sorted by length descending for longest-match-first semantics
+        surnames_by_len = [
+            'SRIVASTAVA', 'CHATTERJEE', 'MUKHERJEE', 'BANERJEE',  # 10
+            'KERKETTA', 'HEMBRAM', 'RAJWAR', 'MAHATO',  # 7-8
+            'BHARTI', 'MANDAL', 'CHANDRA', 'KUMARI', 'PRASAD', 'SHARMA', 'MISHRA',  # 6
+            'PANDEY', 'TIWARI', 'HANSDA', 'TIRKEY', 'KHATUN', 'PATHAK', 'ANSARI',
+            'SHUKLA', 'DUBEY', 'VERMA', 'PANDIT', 'TOPPO', 'LAKRA', 'BASKI', 'SAHAY',
+            'KISKU', 'SOREN', 'ORAON', 'GUPTA', 'YADAV', 'KACHHAP', 'MARANDI',  # 5-7
+            'KUMAR', 'SINGH', 'MURMU', 'SHAW', 'TUDU', 'MODI', 'TURI', 'DEVI', 'RANI',
+            'MUNDA', 'HORO', 'EKKA', 'MINJ', 'BECK', 'TIGGA', 'KUJUR', 'BARA',  # Tribal
+            'DAS', 'PAL', 'LAL', 'RAM', 'SAH', 'ROY',  # 3
+        ]
+        # Also keep the list sorted for safety
+        surnames_sorted = sorted(surnames_by_len, key=len, reverse=True)
 
-        # Step 3: Remove multiple consecutive same letters (2+ in a row) for W and M
-        # These are commonly falsely detected. Keep doubles only for other letters.
-        name = re.sub(r'W{2,}', '', name)  # Remove WW, WWW, WWWW etc
-        name = re.sub(r'M{2,}', 'M', name)  # Keep only one M
+        # Step 1: Remove trailing garbage patterns
+        # First, collapse repeated M/W (MMMM -> M, WWWW -> W)
+        name_no_space = re.sub(r'M{2,}', 'M', name_no_space)
+        name_no_space = re.sub(r'W{2,}', 'W', name_no_space)
+        # Then remove trailing M, W patterns (including mixed like MWMW)
+        name_no_space = re.sub(r'[MW]+$', '', name_no_space)
+        # Remove patterns like MK, WK, KM at the end (common garbage)
+        name_no_space = re.sub(r'[MW]K$', '', name_no_space)
+        name_no_space = re.sub(r'K[MW]$', '', name_no_space)
 
-        # Step 4: Remove other multiple consecutive same letters (3+ in a row)
-        # This catches patterns like "LLL" which are unlikely in names
-        def remove_triple_plus(match):
-            char = match.group(1)
-            return char * 2
-        name = re.sub(r'([A-LN-VX-Z])\1{2,}', remove_triple_plus, name)
+        # Step 2: Remove garbage AFTER known surnames at end
+        # Pattern: surname + any short garbage (2-6 chars) at end
+        for surname in surnames_sorted:
+            # Look for surname followed by short garbage at end
+            pattern = rf'({surname})([A-Z]{{2,6}})$'  # At least 2 chars of garbage
+            match = re.search(pattern, name_no_space)
+            if match:
+                garbage = match.group(2)
+                # Check if this "garbage" could extend a shorter surname to a longer one
+                # e.g., KUMAR + I = KUMARI (valid surname, don't strip)
+                full_word = surname + garbage
+                is_valid_extension = any(full_word.endswith(s) and s != surname
+                                        for s in surnames_sorted if len(s) > len(surname))
+                if is_valid_extension:
+                    continue  # Don't strip, it's a valid longer surname
 
-        # Step 5: Remove noise patterns like "WM", "MW" which are unlikely combinations
-        # after spaces (indicates detection of non-filled bubbles)
-        name = re.sub(r'\s+[WM]{2,}', '', name)
+                # Only strip if garbage looks like noise (has MW or repeated chars)
+                if (any(c in garbage for c in 'MW') or
+                    len(garbage) <= 3 or
+                    re.search(r'(.)\1', garbage)):  # repeated char
+                    name_no_space = name_no_space[:match.start()] + surname
+                    break
 
-        # Step 6: Remove isolated single characters at the end after multiple spaces
-        name = re.sub(r'\s{2,}[A-Z]$', '', name)
+        # Step 3: Find and extract surnames from the end (handles compound surnames)
+        found_surnames = []
+        remaining = name_no_space
 
-        # Step 7: Clean up excessive internal spaces
-        name = re.sub(r'\s{3,}', '  ', name)  # Max 2 spaces between words
+        for iteration in range(3):  # Max 3 surnames
+            found_one = False
 
-        # Step 8: Clean trailing single letters after space at very end
-        # (like "KUMAR K" where K is noise)
-        name = re.sub(r'\s+[JKWM]$', '', name)
+            # First, check if any surname is at the end
+            for surname in surnames_sorted:
+                if remaining.endswith(surname):
+                    # For short surnames (<=4 chars), ensure what remains is substantial
+                    # This prevents false matches like RAM in VIKRAM
+                    potential_remaining = remaining[:-len(surname)]
+                    potential_remaining_clean = re.sub(r'[MW]+$', '', potential_remaining)
 
-        # Step 9: Final strip and cleanup
-        name = name.strip()
+                    # Skip if short surname would leave very short remainder (likely false match)
+                    if len(surname) <= 4 and len(potential_remaining_clean) <= 3:
+                        continue
 
-        # Remove any remaining trailing single space + letter combinations
-        while re.search(r'\s{2,}[A-Z]$', name):
-            name = re.sub(r'\s{2,}[A-Z]$', '', name).strip()
+                    found_surnames.insert(0, surname)
+                    remaining = potential_remaining
+                    # Remove trailing garbage: multiple M/W (2+)
+                    remaining = re.sub(r'[MW]{2,}$', '', remaining)
+                    # Also remove single W (rare in names)
+                    if remaining.endswith('W'):
+                        remaining = remaining[:-1]
+                    # Remove single M only if NOT a common name ending
+                    # Many Indian names end in "AM" (VIKRAM, SHYAM, RAM) or "UM" (GAYTUM)
+                    # Only strip M if it doesn't form these patterns
+                    if remaining.endswith('M') and len(remaining) > 4:
+                        # Keep M if it forms common name endings: -AM, -UM, -IM
+                        if not (remaining.endswith('AM') or remaining.endswith('UM') or remaining.endswith('IM')):
+                            remaining = remaining[:-1]
+                    found_one = True
+                    break
+
+            if not found_one and iteration > 0:
+                # No surname at end - check for EMBEDDED surname with short garbage after
+                # This handles cases like KUMARAMANDAL where A is garbage between KUMAR and MANDAL
+                for surname in surnames_sorted:
+                    idx = remaining.rfind(surname)
+                    if idx > 0:  # Found embedded (not at start)
+                        after = remaining[idx + len(surname):]
+                        # If what's after is short garbage (1-5 chars), extract this surname
+                        if 0 < len(after) <= 5 and re.match(r'^[A-Z]*$', after):
+                            found_surnames.insert(0, surname)
+                            remaining = remaining[:idx]
+                            # Don't strip M/W here - could be part of name (e.g., RADHESHYAM)
+                            found_one = True
+                            break
+
+            if not found_one:
+                break
+
+        # Step 4: Clean the first name part
+        first_name = remaining
+
+        # Remove trailing garbage: only multiple M/W (2+) or single W
+        # Single M is often part of names (VIKRAM, RAM, SHYAM)
+        first_name = re.sub(r'[MW]{2,}$', '', first_name)
+        if first_name.endswith('W'):
+            first_name = first_name[:-1]
+
+        # Handle double A at end (detection error: DEEPIKAA -> DEEPIKA)
+        # But keep single A (SNEHA stays SNEHA)
+        if len(first_name) > 4 and first_name.endswith('AA'):
+            first_name = first_name[:-1]
+
+        # Step 5: Build the final name
+        parts = []
+        if first_name and len(first_name) >= 2:
+            parts.append(first_name)
+        parts.extend(found_surnames)
+
+        name = ' '.join(parts)
+
+        # Step 6: Clean up repeated characters
+        name = re.sub(r'M{2,}', 'M', name)
+        name = re.sub(r'W{2,}', 'W', name)
+        name = re.sub(r'([A-Z])\1{3,}', r'\1', name)  # 4+ same letters -> 1
+
+        # Step 7: Remove garbage patterns (XX)
+        name = re.sub(r'X{2,}[A-Z]*', '', name)
+
+        # Normalize spaces
+        name = ' '.join(name.split())
 
         return name
 
@@ -584,7 +676,8 @@ class OMRCheckerEngine:
         """Convert OMRChecker CSV row to Candidate model."""
         candidate = Candidate(source_image=source_image)
 
-        # Extract Candidate Name (name1..name25)
+        # Extract Candidate Name
+        # Check various possible column names for the name field
         has_individual_cols = any(f'name{i}' in result_data for i in range(1, 26))
 
         if has_individual_cols:
@@ -619,6 +712,10 @@ class OMRCheckerEngine:
             logger.debug(f"Name extraction: raw chars = {name_chars}")
             logger.debug(f"Name extraction: raw name = '{raw_name}'")
             logger.debug(f"Name extraction: cleaned name = '{candidate.name}'")
+        elif 'Name' in result_data and result_data['Name']:
+            # Simple 'Name' column from OMRChecker customLabels
+            raw_name = str(result_data['Name']).strip()
+            candidate.name = self._clean_detected_name(raw_name)
         elif 'CandidateName' in result_data:
             raw_name = str(result_data['CandidateName']).strip()
             candidate.name = self._clean_detected_name(raw_name)
@@ -637,17 +734,20 @@ class OMRCheckerEngine:
                     roll_digits.append(str(result_data[key]))
             candidate.roll_number = ''.join(roll_digits).strip()
 
-        # Extract Class
-        if 'class' in result_data and result_data['class']:
-            candidate.class_ = str(result_data['class'])
+        # Extract Class (check both cases)
+        class_val = result_data.get('Class') or result_data.get('class')
+        if class_val:
+            candidate.class_ = str(class_val).strip()
 
-        # Extract Section
-        if 'section' in result_data and result_data['section']:
-            candidate.section = str(result_data['section'])
+        # Extract Section (check both cases)
+        section_val = result_data.get('Section') or result_data.get('section')
+        if section_val:
+            candidate.section = str(section_val).strip()
 
-        # Extract School Code
-        if 'SchoolCode' in result_data:
-            candidate.school_code = str(result_data['SchoolCode']).strip()
+        # Extract School Code (check multiple possible column names)
+        school_val = result_data.get('School') or result_data.get('SchoolCode') or result_data.get('school_code')
+        if school_val:
+            candidate.school_code = str(school_val).strip()
         else:
             school_digits = []
             for i in range(1, 5):

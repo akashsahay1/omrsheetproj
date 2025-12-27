@@ -37,6 +37,8 @@ echo ===============================================
 echo  Build completed successfully!
 echo ===============================================
 echo.
-echo Executable location: dist\OMR Processor.exe
+echo Executable location: dist\VB OMR Scanner.exe
+echo.
+echo To create an installer, run: build_installer.bat
 echo.
 pause

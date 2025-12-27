@@ -223,17 +223,18 @@ class OMRAIEngine:
 
     def _align_sheet(self, image: np.ndarray) -> Optional[np.ndarray]:
         """Align the OMR sheet to a standard orientation."""
-        # Try marker-based alignment first
-        result = self.aligner.align(image)
-
-        if result.success:
-            return result.aligned_image
-
-        # Fall back to feature-based alignment if we have a reference
+        # Prefer feature-based alignment when we have a reference image
+        # This is more reliable than marker detection for sheets without
+        # clear corner markers at the actual page corners
         if self.reference_image is not None:
             result = self.aligner.align_with_reference(image, self.reference_image)
             if result.success:
                 return result.aligned_image
+
+        # Fall back to marker-based alignment
+        result = self.aligner.align(image)
+        if result.success:
+            return result.aligned_image
 
         # Last resort: just resize to standard dimensions
         return cv2.resize(image, (2480, 3507))

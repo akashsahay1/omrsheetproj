@@ -36,6 +36,7 @@ class ProcessingResult:
     # Warnings and flags
     warnings: List[str] = field(default_factory=list)
     alignment_confidence: float = 0.0
+    detection_confidence: float = 100.0  # Overall detection confidence (0-100%)
     needs_manual_review: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
@@ -49,6 +50,7 @@ class ProcessingResult:
             'timestamp': self.timestamp,
             'warnings': self.warnings,
             'alignment_confidence': self.alignment_confidence,
+            'detection_confidence': self.detection_confidence,
             'needs_manual_review': self.needs_manual_review
         }
 
@@ -120,6 +122,9 @@ class BatchResult:
     end_time: str = ""
     total_time_seconds: float = 0.0
 
+    # Output file path (where Excel was exported)
+    output_path: str = ""
+
     # Statistics (calculated after processing)
     average_score: float = 0.0
     highest_score: float = 0.0
@@ -183,6 +188,7 @@ class BatchResult:
             'start_time': self.start_time,
             'end_time': self.end_time,
             'total_time_seconds': self.total_time_seconds,
+            'output_path': self.output_path,
             'average_score': self.average_score,
             'highest_score': self.highest_score,
             'lowest_score': self.lowest_score,

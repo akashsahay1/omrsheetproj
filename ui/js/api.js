@@ -64,6 +64,14 @@ const API = {
         return this.call('cancel_processing');
     },
 
+    async pauseProcessing() {
+        return this.call('pause_processing');
+    },
+
+    async resumeProcessing() {
+        return this.call('resume_processing');
+    },
+
     async getProgress() {
         return this.call('get_progress');
     },

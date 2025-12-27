@@ -189,6 +189,13 @@ class BatchProcessor:
         self._progress.start_time = start_time
         self._batch_result.start_time = datetime.now().isoformat()
 
+        # Auto-generate output path if not provided
+        if not output_path and image_files:
+            input_folder = Path(image_files[0]).parent
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_path = str(input_folder / f'omr_results_{timestamp}.xlsx')
+            logger.info(f"Auto-generated output path: {output_path}")
+
         processed_count = 0
         candidates = []
 
@@ -282,6 +289,10 @@ class BatchProcessor:
                     else:
                         self.exporter.export_simple(candidates, output_path)
 
+                    # Store output path for UI access
+                    self._batch_result.output_path = output_path
+                    logger.info(f"Exported results to: {output_path}")
+
                 # Calculate statistics
                 self._batch_result.calculate_statistics()
                 self._batch_result.end_time = datetime.now().isoformat()
@@ -329,6 +340,11 @@ class BatchProcessor:
     def cancel(self) -> None:
         """Cancel ongoing processing"""
         self._is_cancelled = True
+        # Immediately update progress status so UI reflects cancellation
+        self._update_progress(
+            status=BatchStatus.CANCELLED,
+            message="Cancellation requested..."
+        )
         logger.info("Batch processing cancellation requested")
 
     def pause(self) -> None:

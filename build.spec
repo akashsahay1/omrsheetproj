@@ -30,6 +30,8 @@ datas = [
     (os.path.join(BASE_DIR, 'templates'), 'templates'),
     # OMRChecker library and templates
     (os.path.join(BASE_DIR, 'OMRChecker'), 'OMRChecker'),
+    # ML models
+    (os.path.join(BASE_DIR, 'models'), 'models'),
 ]
 
 # Collect all webview submodules automatically
@@ -70,6 +72,25 @@ hiddenimports = [
     'src.processors',
     'src.template',
     'src.entry',
+    # ML/AI modules
+    'torch',
+    'torch.nn',
+    'torch.optim',
+    'torchvision',
+    'pytesseract',
+    # EasyOCR for handwritten name extraction
+    'easyocr',
+    'easyocr.recognition',
+    'easyocr.detection',
+    'easyocr.utils',
+    'easyocr.model',
+    'easyocr.craft_utils',
+    'easyocr.imgproc',
+    'src.ai',
+    'src.ai.yolo_omr_processor',
+    'src.ai.bubble_classifier',
+    'src.ai.ocr_extractor',
+    'src.core.ml_engine',
 ]
 
 # Add webview submodules
@@ -117,6 +138,27 @@ datas.extend(numpy_datas)
 # Collect webview data files (JS, HTML resources)
 webview_datas = collect_data_files('webview')
 datas.extend(webview_datas)
+
+# Collect torch data files (for ML)
+try:
+    torch_datas = collect_data_files('torch')
+    datas.extend(torch_datas)
+except Exception:
+    pass
+
+# Collect torchvision data files
+try:
+    torchvision_datas = collect_data_files('torchvision')
+    datas.extend(torchvision_datas)
+except Exception:
+    pass
+
+# Collect EasyOCR data files (models, etc.)
+try:
+    easyocr_datas = collect_data_files('easyocr')
+    datas.extend(easyocr_datas)
+except Exception:
+    pass
 
 # Collect OpenCV (cv2) - all data, binaries, and submodules
 cv2_datas, cv2_binaries, cv2_hiddenimports = collect_all('cv2')
@@ -191,7 +233,7 @@ if is_macos:
     app = BUNDLE(
         coll,
         name=f'{APP_SHORT_NAME}.app',
-        icon=os.path.join(BASE_DIR, 'assets', 'icon.icns') if os.path.exists(os.path.join(BASE_DIR, 'assets', 'icon.icns')) else None,
+        icon=os.path.join(BASE_DIR, 'assets', 'vbomr_icon.icns') if os.path.exists(os.path.join(BASE_DIR, 'assets', 'vbomr_icon.icns')) else None,
         bundle_identifier=BUNDLE_ID,
         info_plist={
             'CFBundleName': APP_NAME,

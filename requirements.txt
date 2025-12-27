@@ -15,5 +15,18 @@ openpyxl>=3.1.0
 # Configuration & Validation
 jsonschema>=4.17.0
 
+# AI/ML for name extraction
+torch>=2.0.0
+torchvision>=0.15.0
+easyocr>=1.7.0
+
+# OMRChecker dependencies
+pandas>=2.0.0
+rich>=13.0.0
+dotmap>=1.3.0
+deepmerge>=1.1.0
+screeninfo>=0.8.0
+matplotlib>=3.7.0
+
 # Packaging (development only)
 pyinstaller>=6.0.0

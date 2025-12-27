@@ -27,6 +27,9 @@ class Candidate:
     source_image: str = ""
     image_index: int = 0
 
+    # Detection confidence (0-100%)
+    detection_confidence: float = 100.0
+
     def __post_init__(self):
         """Initialize answers dict if empty"""
         if not self.answers:
@@ -76,7 +79,8 @@ class Candidate:
             'source_image': self.source_image,
             'answered_count': self.answered_count,
             'multi_marked_count': self.multi_marked_count,
-            'unanswered_count': self.unanswered_count
+            'unanswered_count': self.unanswered_count,
+            'detection_confidence': self.detection_confidence
         }
 
     @classmethod
@@ -92,7 +96,8 @@ class Candidate:
             multi_marked_questions=data.get('multi_marked_questions', []),
             unanswered_questions=data.get('unanswered_questions', []),
             source_image=data.get('source_image', ''),
-            image_index=data.get('image_index', 0)
+            image_index=data.get('image_index', 0),
+            detection_confidence=data.get('detection_confidence', 100.0)
         )
 
     def __str__(self) -> str:

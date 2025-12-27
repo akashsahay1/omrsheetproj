@@ -203,17 +203,20 @@
                     <table class="data-table" id="results-table">
                         <thead>
                             <tr>
-                                <th>Rank</th>
+                                <th>S.No.</th>
+                                <th class="sortable" data-sort="rank" onclick="sortResults('rank')">Rank <span class="sort-icon">&#8597;</span></th>
                                 <th>Filename</th>
-                                <th>Name</th>
+                                <th class="sortable" data-sort="name" onclick="sortResults('name')">Name <span class="sort-icon">&#8597;</span></th>
                                 <th>Roll No.</th>
                                 <th>Class</th>
                                 <th>Section</th>
                                 <th>School Code</th>
                                 <th>Correct</th>
                                 <th>Wrong</th>
-                                <th>Score</th>
-                                <th>%</th>
+                                <th>Unanswered</th>
+                                <th class="sortable" data-sort="total_score" onclick="sortResults('total_score')">Score <span class="sort-icon">&#8597;</span></th>
+                                <th class="sortable" data-sort="percentage" onclick="sortResults('percentage')">% <span class="sort-icon">&#8597;</span></th>
+                                <th class="sortable" data-sort="confidence" onclick="sortResults('confidence')">Conf <span class="sort-icon">&#8597;</span></th>
                             </tr>
                         </thead>
                         <tbody id="results-body">

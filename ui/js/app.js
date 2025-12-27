@@ -10,10 +10,13 @@ const AppState = {
     fileCount: 0,
     answerKey: null,
     isProcessing: false,
+    isPaused: false,
     results: [],
     progressInterval: null,
     examLevel: 'Prarambhik',
-    examType: 'Chayan'
+    examType: 'Chayan',
+    sortColumn: 'rank',
+    sortDirection: 'asc'
 };
 
 // Initialize application when DOM is ready
@@ -234,10 +237,32 @@ function updateAnswerKeyStatus() {
 // ==================== Processing ====================
 
 /**
- * Start batch processing
+ * Start or toggle pause for batch processing
  */
 async function startProcessing() {
-    // Validate
+    // If processing and not paused, pause it
+    if (AppState.isProcessing && !AppState.isPaused) {
+        const result = await API.pauseProcessing();
+        if (result.success) {
+            AppState.isPaused = true;
+            document.getElementById('btn-start').textContent = 'Resume';
+            showToast('Processing paused', 'warning');
+        }
+        return;
+    }
+
+    // If paused, resume it
+    if (AppState.isProcessing && AppState.isPaused) {
+        const result = await API.resumeProcessing();
+        if (result.success) {
+            AppState.isPaused = false;
+            document.getElementById('btn-start').textContent = 'Pause';
+            showToast('Processing resumed', 'success');
+        }
+        return;
+    }
+
+    // Validate for new processing
     if (!AppState.inputFolder) {
         showToast('Please select an input folder', 'warning');
         return;
@@ -265,9 +290,10 @@ async function startProcessing() {
 
     if (result.success) {
         AppState.isProcessing = true;
+        AppState.isPaused = false;
 
         // Update UI
-        document.getElementById('btn-start').disabled = true;
+        document.getElementById('btn-start').textContent = 'Pause';
         document.getElementById('btn-cancel').disabled = false;
         document.getElementById('progress-section').classList.remove('hidden');
 
@@ -281,13 +307,47 @@ async function startProcessing() {
 }
 
 /**
- * Cancel processing
+ * Cancel processing and reset everything
  */
 async function cancelProcessing() {
     const result = await API.cancelProcessing();
 
     if (result.success) {
-        showToast('Cancellation requested', 'warning');
+        // Stop polling
+        stopProgressPolling();
+
+        // Reset state
+        AppState.isProcessing = false;
+        AppState.isPaused = false;
+        AppState.results = [];
+
+        // Reset UI
+        document.getElementById('btn-start').textContent = 'Start Scan';
+        document.getElementById('btn-start').disabled = false;
+        document.getElementById('btn-cancel').disabled = true;
+
+        // Reset progress bar
+        document.getElementById('progress-bar').style.width = '0%';
+        document.getElementById('progress-text').textContent = '0%';
+        document.getElementById('progress-status').textContent = 'Status: Ready';
+        document.getElementById('progress-file').textContent = 'Current: -';
+        document.getElementById('progress-count').textContent = 'Processed: 0 / 0';
+        document.getElementById('progress-time').textContent = 'Elapsed: 0s | Remaining: -';
+        document.getElementById('progress-section').classList.add('hidden');
+
+        // Reset results display to initial state
+        document.getElementById('results-stats').classList.add('hidden');
+        document.getElementById('results-empty').classList.remove('hidden');
+        document.getElementById('results-table-container').classList.add('hidden');
+        document.getElementById('results-body').innerHTML = '';
+
+        // Reset stats values
+        document.getElementById('stat-total').textContent = '0';
+        document.getElementById('stat-avg').textContent = '0';
+        document.getElementById('stat-high').textContent = '0';
+        document.getElementById('stat-low').textContent = '0';
+
+        showToast('Processing cancelled and reset', 'warning');
     }
 }
 
@@ -307,7 +367,9 @@ function startProgressPolling() {
         if (progress.status === 'completed' || progress.status === 'cancelled' || progress.status === 'error') {
             stopProgressPolling();
             AppState.isProcessing = false;
+            AppState.isPaused = false;
 
+            document.getElementById('btn-start').textContent = 'Start Scan';
             document.getElementById('btn-start').disabled = false;
             document.getElementById('btn-cancel').disabled = true;
 
@@ -317,6 +379,15 @@ function startProgressPolling() {
             } else if (progress.status === 'error') {
                 showToast(`Error: ${progress.message}`, 'error');
             }
+        }
+
+        // Update button text based on paused state
+        if (progress.status === 'paused') {
+            AppState.isPaused = true;
+            document.getElementById('btn-start').textContent = 'Resume';
+        } else if (progress.status === 'running') {
+            AppState.isPaused = false;
+            document.getElementById('btn-start').textContent = 'Pause';
         }
     }, 500);
 }
@@ -364,6 +435,11 @@ async function loadResults() {
         document.getElementById('stat-high').textContent = result.statistics.highest_score;
         document.getElementById('stat-low').textContent = result.statistics.lowest_score;
 
+        // Show export path notification if available
+        if (result.output_path) {
+            showToast(`Results exported to: ${result.output_path}`, 'success');
+        }
+
         // Show stats bar
         document.getElementById('results-stats').classList.remove('hidden');
         document.getElementById('results-empty').classList.add('hidden');
@@ -373,12 +449,20 @@ async function loadResults() {
         const tbody = document.getElementById('results-body');
         tbody.innerHTML = '';
 
-        result.results.forEach((r, index) => {
+        // Sort results based on current sort settings
+        const sortedResults = sortResultsArray(result.results);
+
+        sortedResults.forEach((r, index) => {
             const row = document.createElement('tr');
             row.className = 'result-row' + (r.multi_marked > 0 ? ' multi-marked' : '');
-            row.onclick = () => showResultDetail(index);
+            row.onclick = () => showResultDetail(r._originalIndex);
+
+            // Confidence display with color coding
+            const confidence = r.confidence !== undefined ? r.confidence : 100;
+            const confClass = confidence >= 90 ? 'conf-high' : (confidence >= 70 ? 'conf-medium' : 'conf-low');
 
             row.innerHTML = `
+                <td>${index + 1}</td>
                 <td>${r.rank}</td>
                 <td class="filename-cell" title="${r.filename || ''}">${r.filename || ''}</td>
                 <td>${r.name}</td>
@@ -388,12 +472,17 @@ async function loadResults() {
                 <td>${r.school_code}</td>
                 <td>${r.correct}</td>
                 <td>${r.wrong}</td>
+                <td>${r.unanswered}</td>
                 <td>${r.total_score}</td>
                 <td>${r.percentage}%</td>
+                <td class="${confClass}">${confidence}%</td>
             `;
 
             tbody.appendChild(row);
         });
+
+        // Update sort icons
+        updateSortIcons();
     } else {
         // Show empty state
         document.getElementById('results-stats').classList.add('hidden');
@@ -521,6 +610,138 @@ async function exportResults() {
     }
 }
 
+// ==================== Sorting ====================
+
+/**
+ * Sort results by column
+ * @param {string} column - Column to sort by
+ */
+function sortResults(column) {
+    // Toggle direction if same column, otherwise default to ascending
+    if (AppState.sortColumn === column) {
+        AppState.sortDirection = AppState.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+        AppState.sortColumn = column;
+        AppState.sortDirection = 'asc';
+    }
+
+    // Re-render results table
+    renderResultsTable();
+}
+
+/**
+ * Sort results array based on current sort settings
+ * @param {Array} results - Results array to sort
+ * @returns {Array} Sorted array with original indices preserved
+ */
+function sortResultsArray(results) {
+    // Add original index for detail view
+    const indexed = results.map((r, i) => ({ ...r, _originalIndex: i }));
+
+    return indexed.sort((a, b) => {
+        let valA, valB;
+
+        switch (AppState.sortColumn) {
+            case 'rank':
+                valA = parseInt(a.rank) || 0;
+                valB = parseInt(b.rank) || 0;
+                break;
+            case 'name':
+                valA = (a.name || '').toLowerCase();
+                valB = (b.name || '').toLowerCase();
+                break;
+            case 'total_score':
+                valA = parseFloat(a.total_score) || 0;
+                valB = parseFloat(b.total_score) || 0;
+                break;
+            case 'percentage':
+                valA = parseFloat(a.percentage) || 0;
+                valB = parseFloat(b.percentage) || 0;
+                break;
+            case 'confidence':
+                valA = parseFloat(a.confidence !== undefined ? a.confidence : 100);
+                valB = parseFloat(b.confidence !== undefined ? b.confidence : 100);
+                break;
+            default:
+                valA = a[AppState.sortColumn];
+                valB = b[AppState.sortColumn];
+        }
+
+        // Compare values
+        let comparison = 0;
+        if (typeof valA === 'string') {
+            comparison = valA.localeCompare(valB);
+        } else {
+            comparison = valA - valB;
+        }
+
+        return AppState.sortDirection === 'asc' ? comparison : -comparison;
+    });
+}
+
+/**
+ * Render results table with current sort
+ */
+function renderResultsTable() {
+    if (!AppState.results || AppState.results.length === 0) return;
+
+    const tbody = document.getElementById('results-body');
+    tbody.innerHTML = '';
+
+    const sortedResults = sortResultsArray(AppState.results);
+
+    sortedResults.forEach((r, index) => {
+        const row = document.createElement('tr');
+        row.className = 'result-row' + (r.multi_marked > 0 ? ' multi-marked' : '');
+        row.onclick = () => showResultDetail(r._originalIndex);
+
+        const confidence = r.confidence !== undefined ? r.confidence : 100;
+        const confClass = confidence >= 90 ? 'conf-high' : (confidence >= 70 ? 'conf-medium' : 'conf-low');
+
+        row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${r.rank}</td>
+            <td class="filename-cell" title="${r.filename || ''}">${r.filename || ''}</td>
+            <td>${r.name}</td>
+            <td>${r.roll_number}</td>
+            <td>${r.class}</td>
+            <td>${r.section}</td>
+            <td>${r.school_code}</td>
+            <td>${r.correct}</td>
+            <td>${r.wrong}</td>
+            <td>${r.unanswered}</td>
+            <td>${r.total_score}</td>
+            <td>${r.percentage}%</td>
+            <td class="${confClass}">${confidence}%</td>
+        `;
+
+        tbody.appendChild(row);
+    });
+
+    updateSortIcons();
+}
+
+/**
+ * Update sort icons to show current sort state
+ */
+function updateSortIcons() {
+    // Reset all sort icons
+    document.querySelectorAll('.sortable .sort-icon').forEach(icon => {
+        icon.innerHTML = '&#8597;'; // Up-down arrow
+        icon.parentElement.classList.remove('sort-asc', 'sort-desc');
+    });
+
+    // Update current sort column icon
+    const currentHeader = document.querySelector(`.sortable[data-sort="${AppState.sortColumn}"]`);
+    if (currentHeader) {
+        const icon = currentHeader.querySelector('.sort-icon');
+        if (icon) {
+            icon.innerHTML = AppState.sortDirection === 'asc' ? '&#8593;' : '&#8595;'; // Up or down arrow
+        }
+        currentHeader.classList.add(AppState.sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+    }
+}
+
 // ==================== Settings ====================
 
 /**
@@ -619,3 +840,4 @@ window.showResultDetail = showResultDetail;
 window.openModal = openModal;
 window.closeModal = closeModal;
 window.updateAnswerKeyCount = updateAnswerKeyCount;
+window.sortResults = sortResults;

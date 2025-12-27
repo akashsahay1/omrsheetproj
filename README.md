@@ -74,17 +74,25 @@ open "dist/VB OMR Scanner.app"
 #### Windows
 
 ```batch
-# Setup environment
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
+# Setup environment and install dependencies
+setup.bat
 
-# Build the application
+# Build the executable
 build.bat
 
+# (Optional) Create installer with Inno Setup
+build_installer.bat
+
 # Run the application
-dist\VB OMR Scanner.exe
+run.bat
+# Or run the built executable
+dist\"VB OMR Scanner.exe"
 ```
+
+**Windows Build Requirements:**
+- Python 3.9+ installed and in PATH
+- Visual C++ Redistributable (for OpenCV)
+- Inno Setup 6 (optional, for creating installer)
 
 ## Usage
 
@@ -215,11 +223,20 @@ Fine-tune detection in `OMRChecker/inputs/VidyaBharti2025/config.json`:
 | matplotlib | Visualization |
 | dotmap | Dictionary access |
 | deepmerge | Config merging |
+| torch | Machine learning (name detection) |
+| torchvision | Vision models |
+| easyocr | OCR for handwritten text |
 
 ### Install All Dependencies
 
 ```bash
-pip install opencv-python numpy pandas pywebview openpyxl Pillow jsonschema rich matplotlib dotmap deepmerge screeninfo pyinstaller
+pip install -r requirements.txt
+```
+
+Or install manually:
+
+```bash
+pip install opencv-python numpy pandas pywebview openpyxl Pillow jsonschema rich matplotlib dotmap deepmerge screeninfo torch torchvision easyocr pyinstaller
 ```
 
 ## Troubleshooting
