@@ -30,6 +30,9 @@ class Candidate:
     # Detection confidence (0-100%)
     detection_confidence: float = 100.0
 
+    # Field-level confidences (0-100%)
+    field_confidences: Dict[str, float] = field(default_factory=dict)
+
     def __post_init__(self):
         """Initialize answers dict if empty"""
         if not self.answers:
@@ -80,7 +83,8 @@ class Candidate:
             'answered_count': self.answered_count,
             'multi_marked_count': self.multi_marked_count,
             'unanswered_count': self.unanswered_count,
-            'detection_confidence': self.detection_confidence
+            'detection_confidence': self.detection_confidence,
+            'field_confidences': self.field_confidences
         }
 
     @classmethod
@@ -97,7 +101,8 @@ class Candidate:
             unanswered_questions=data.get('unanswered_questions', []),
             source_image=data.get('source_image', ''),
             image_index=data.get('image_index', 0),
-            detection_confidence=data.get('detection_confidence', 100.0)
+            detection_confidence=data.get('detection_confidence', 100.0),
+            field_confidences=data.get('field_confidences', {})
         )
 
     def __str__(self) -> str:

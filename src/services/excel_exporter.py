@@ -56,6 +56,14 @@ class ExcelExporter:
         self.red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
         self.yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
 
+        # Confidence level colors
+        self.conf_high_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")  # Green
+        self.conf_high_font = Font(color="006100", bold=True)  # Dark green text
+        self.conf_medium_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")  # Yellow
+        self.conf_medium_font = Font(color="9C5700", bold=True)  # Dark yellow/orange text
+        self.conf_low_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")  # Red
+        self.conf_low_font = Font(color="9C0006", bold=True)  # Dark red text
+
     def export(self,
                evaluation_results: List[EvaluationResult],
                output_path: str,
@@ -109,9 +117,9 @@ class ExcelExporter:
         ws = wb.active
         ws.title = "Results"
 
-        # Merge headers only across main data columns (A to N = 14 columns)
+        # Merge headers only across main data columns (A to O = 15 columns)
         # This keeps headers centered and visible without scrolling
-        header_merge_col = 'N'  # S.No. to Rank (14 columns including Filename)
+        header_merge_col = 'O'  # S.No. to Rank (15 columns including Filename and Confidence)
 
         # ========== ORGANIZATION HEADER ROWS ==========
 
@@ -147,11 +155,11 @@ class ExcelExporter:
         # ========== COLUMN HEADERS (Row 7) ==========
         header_row = 7
 
-        # New column order as specified:
-        # S.No., Filename, Name, School Code, Class, Section, Roll No., Total Score, Percentage,
+        # Column order with Confidence after Filename:
+        # S.No., Filename, Confidence, Name, School Code, Class, Section, Roll No., Total Score, Percentage,
         # Correct, Wrong, Unanswered, Multi-Marked, Rank, Q1-Q60
         headers = [
-            "S.No.", "Filename", "Name", "School Code", "Class", "Section", "Roll No.",
+            "S.No.", "Filename", "Conf %", "Name", "School Code", "Class", "Section", "Roll No.",
             "Total Score", "Percentage", "Correct", "Wrong", "Unanswered",
             "Multi-Marked", "Rank"
         ]
@@ -185,47 +193,63 @@ class ExcelExporter:
             import os
             filename = os.path.basename(candidate.source_image) if candidate.source_image else ''
 
-            # New column order:
+            # Get detection confidence
+            confidence = candidate.detection_confidence if hasattr(candidate, 'detection_confidence') else 100.0
+
+            # Column order with Confidence after Filename:
             # 1: S.No.
             ws.cell(row=data_row, column=1, value=serial_no)
             # 2: Filename
             ws.cell(row=data_row, column=2, value=filename)
-            # 3: Name
-            ws.cell(row=data_row, column=3, value=candidate.name)
-            # 4: School Code
-            ws.cell(row=data_row, column=4, value=candidate.school_code)
-            # 5: Class
-            ws.cell(row=data_row, column=5, value=candidate.class_)
-            # 6: Section
-            ws.cell(row=data_row, column=6, value=candidate.section)
-            # 7: Roll No.
-            ws.cell(row=data_row, column=7, value=candidate.roll_number)
-            # 8: Total Score
-            ws.cell(row=data_row, column=8, value=result.total_score)
-            # 9: Percentage
-            ws.cell(row=data_row, column=9, value=f"{result.percentage}%")
-            # 10: Correct
-            ws.cell(row=data_row, column=10, value=result.correct_count)
-            # 11: Wrong
-            ws.cell(row=data_row, column=11, value=result.wrong_count)
-            # 12: Unanswered
-            ws.cell(row=data_row, column=12, value=result.unanswered_count)
-            # 13: Multi-Marked
-            ws.cell(row=data_row, column=13, value=result.multi_marked_count)
-            # 14: Rank
-            ws.cell(row=data_row, column=14, value=result.rank)
+            # 3: Confidence % (with color coding)
+            conf_cell = ws.cell(row=data_row, column=3, value=f"{confidence:.0f}%")
+            conf_cell.alignment = self.center_align
+            # Apply color based on confidence level
+            if confidence >= 80:
+                conf_cell.fill = self.conf_high_fill
+                conf_cell.font = self.conf_high_font
+            elif confidence >= 50:
+                conf_cell.fill = self.conf_medium_fill
+                conf_cell.font = self.conf_medium_font
+            else:
+                conf_cell.fill = self.conf_low_fill
+                conf_cell.font = self.conf_low_font
+            # 4: Name
+            ws.cell(row=data_row, column=4, value=candidate.name)
+            # 5: School Code
+            ws.cell(row=data_row, column=5, value=candidate.school_code)
+            # 6: Class
+            ws.cell(row=data_row, column=6, value=candidate.class_)
+            # 7: Section
+            ws.cell(row=data_row, column=7, value=candidate.section)
+            # 8: Roll No.
+            ws.cell(row=data_row, column=8, value=candidate.roll_number)
+            # 9: Total Score
+            ws.cell(row=data_row, column=9, value=result.total_score)
+            # 10: Percentage
+            ws.cell(row=data_row, column=10, value=f"{result.percentage}%")
+            # 11: Correct
+            ws.cell(row=data_row, column=11, value=result.correct_count)
+            # 12: Wrong
+            ws.cell(row=data_row, column=12, value=result.wrong_count)
+            # 13: Unanswered
+            ws.cell(row=data_row, column=13, value=result.unanswered_count)
+            # 14: Multi-Marked
+            ws.cell(row=data_row, column=14, value=result.multi_marked_count)
+            # 15: Rank
+            ws.cell(row=data_row, column=15, value=result.rank)
 
             # Apply formatting to all data columns
-            for col in range(1, 15):
+            for col in range(1, 16):
                 cell = ws.cell(row=data_row, column=col)
                 cell.border = self.thin_border
-                if col not in (2, 3):  # All centered except Filename and Name columns
+                if col not in (2, 4):  # All centered except Filename and Name columns
                     cell.alignment = self.center_align
 
-            # Add answers if requested (columns 15-74 for Q1-Q60)
+            # Add answers if requested (columns 16-75 for Q1-Q60)
             if include_answers:
                 for q in range(1, 61):
-                    col = 14 + q
+                    col = 15 + q
                     answer = candidate.get_answer(q)
                     cell = ws.cell(row=data_row, column=col, value=answer)
                     cell.alignment = self.center_align
@@ -338,9 +362,9 @@ class ExcelExporter:
             ws = wb.active
             ws.title = "Extracted Data"
 
-            # Headers
+            # Headers with Confidence after Filename
             headers = [
-                "S.No.", "Filename", "Name", "Roll No.", "Class", "Section", "School Code"
+                "S.No.", "Filename", "Conf %", "Name", "Roll No.", "Class", "Section", "School Code"
             ]
             for q in range(1, 61):
                 headers.append(f"Q{q}")
@@ -356,17 +380,30 @@ class ExcelExporter:
             for row_idx, candidate in enumerate(candidates, 2):
                 import os
                 filename = os.path.basename(candidate.source_image) if candidate.source_image else ''
+                confidence = candidate.detection_confidence if hasattr(candidate, 'detection_confidence') else 100.0
 
                 ws.cell(row=row_idx, column=1, value=row_idx - 1)
                 ws.cell(row=row_idx, column=2, value=filename)
-                ws.cell(row=row_idx, column=3, value=candidate.name)
-                ws.cell(row=row_idx, column=4, value=candidate.roll_number)
-                ws.cell(row=row_idx, column=5, value=candidate.class_)
-                ws.cell(row=row_idx, column=6, value=candidate.section)
-                ws.cell(row=row_idx, column=7, value=candidate.school_code)
+                # 3: Confidence % with color coding
+                conf_cell = ws.cell(row=row_idx, column=3, value=f"{confidence:.0f}%")
+                conf_cell.alignment = self.center_align
+                if confidence >= 80:
+                    conf_cell.fill = self.conf_high_fill
+                    conf_cell.font = self.conf_high_font
+                elif confidence >= 50:
+                    conf_cell.fill = self.conf_medium_fill
+                    conf_cell.font = self.conf_medium_font
+                else:
+                    conf_cell.fill = self.conf_low_fill
+                    conf_cell.font = self.conf_low_font
+                ws.cell(row=row_idx, column=4, value=candidate.name)
+                ws.cell(row=row_idx, column=5, value=candidate.roll_number)
+                ws.cell(row=row_idx, column=6, value=candidate.class_)
+                ws.cell(row=row_idx, column=7, value=candidate.section)
+                ws.cell(row=row_idx, column=8, value=candidate.school_code)
 
                 for q in range(1, 61):
-                    ws.cell(row=row_idx, column=7 + q, value=candidate.get_answer(q))
+                    ws.cell(row=row_idx, column=8 + q, value=candidate.get_answer(q))
 
             self._auto_adjust_columns(ws)
             ws.freeze_panes = "A2"
