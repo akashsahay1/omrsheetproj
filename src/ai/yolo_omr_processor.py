@@ -99,10 +99,14 @@ class YOLOOMRProcessor:
     # Origin coordinates point to top-left of first bubble in each field
     FIELD_CONFIGS = {
         'name': {
-            # Calibrated 2024-12-27 using circle detection on name bubble grid
+            # Calibrated 2024-12-29 using circle detection on name bubble grid
             # The name bubble grid is on the left side of the form
             # Each column represents one letter position, rows A-Z for letters
-            'origin': (189, 671),
+            # Origin is top-left of first bubble (row A, col 0)
+            # Detected bubble centers at (180, 718), subtract half bubble_size for top-left
+            # Default origin - will be adjusted per-image based on batch detection
+            'origin': (189, 671),  # Works for Khoj batch (most common)
+            'origin_chayan': (164, 702),  # Works for Chayan batch (39_*.jpg files)
             'bubble_size': (33, 33),
             'rows_gap': 52,  # Vertical distance between A,B,C... rows
             'cols_gap': 54,  # Horizontal distance between letter columns
@@ -160,29 +164,56 @@ class YOLOOMRProcessor:
     # Answer blocks configuration
     # Answer section: 6 blocks, each with 10 questions arranged VERTICALLY
     # Options A,B,C,D go HORIZONTALLY within each question
-    # Coordinates calibrated from actual scanned images (41_624.jpg)
+    # Calibrated 2024-12-29 from actual filled bubble positions
+    # Default origins for Khoj batch (most common)
     ANSWER_BLOCKS = [
-        {'origin': (270, 2170), 'questions': range(1, 11)},    # Block 1: Q1-10
-        {'origin': (630, 2170), 'questions': range(11, 21)},   # Block 2: Q11-20
-        {'origin': (990, 2170), 'questions': range(21, 31)},   # Block 3: Q21-30
-        {'origin': (1350, 2170), 'questions': range(31, 41)},  # Block 4: Q31-40
-        {'origin': (1710, 2170), 'questions': range(41, 51)},  # Block 5: Q41-50
-        {'origin': (2070, 2170), 'questions': range(51, 61)},  # Block 6: Q51-60
+        {'origin': (286, 2111), 'questions': range(1, 11)},    # Block 1: Q1-10
+        {'origin': (646, 2111), 'questions': range(11, 21)},   # Block 2: Q11-20
+        {'origin': (1006, 2111), 'questions': range(21, 31)},  # Block 3: Q21-30
+        {'origin': (1366, 2111), 'questions': range(31, 41)},  # Block 4: Q31-40
+        {'origin': (1726, 2111), 'questions': range(41, 51)},  # Block 5: Q41-50
+        {'origin': (2086, 2111), 'questions': range(51, 61)},  # Block 6: Q51-60
+    ]
+    # Chayan batch (39_*.jpg) has different alignment
+    ANSWER_BLOCKS_CHAYAN = [
+        {'origin': (252, 2112), 'questions': range(1, 11)},    # Block 1: Q1-10
+        {'origin': (612, 2112), 'questions': range(11, 21)},   # Block 2: Q11-20
+        {'origin': (972, 2112), 'questions': range(21, 31)},   # Block 3: Q21-30
+        {'origin': (1332, 2112), 'questions': range(31, 41)},  # Block 4: Q31-40
+        {'origin': (1692, 2112), 'questions': range(41, 51)},  # Block 5: Q41-50
+        {'origin': (2052, 2112), 'questions': range(51, 61)},  # Block 6: Q51-60
     ]
     ANSWER_BUBBLE_SIZE = (28, 28)
-    ANSWER_OPTION_GAP = 70   # Horizontal gap between A,B,C,D options
-    # Row positions are NOT uniform - use empirical values from calibration
+    ANSWER_OPTION_GAP = 65   # Horizontal gap between A,B,C,D options (was 70)
+    # Row positions calibrated from actual filled bubbles
+    # Gaps are approximately 80-90 pixels between rows
+    # Row positions for Khoj batch (TOP-LEFT of bubbles)
+    # Detected centers: Q1≈2109, Q2≈2189, Q3≈2282; subtract 14 for top-left
     ANSWER_ROW_POSITIONS = [
-        2170,  # Q1, Q11, Q21, Q31, Q41, Q51
-        2260,  # Q2, Q12, Q22, Q32, Q42, Q52
-        2360,  # Q3, Q13, Q23, Q33, Q43, Q53
-        2450,  # Q4, Q14, Q24, Q34, Q44, Q54
-        2540,  # Q5, Q15, Q25, Q35, Q45, Q55
-        2630,  # Q6, Q16, Q26, Q36, Q46, Q56
-        2730,  # Q7, Q17, Q27, Q37, Q47, Q57
-        2820,  # Q8, Q18, Q28, Q38, Q48, Q58
-        2910,  # Q9, Q19, Q29, Q39, Q49, Q59
-        3000,  # Q10, Q20, Q30, Q40, Q50, Q60
+        2095,  # Q1 (center 2109 - 14)
+        2175,  # Q2 (center 2189 - 14)
+        2268,  # Q3 (center 2282 - 14)
+        2361,  # Q4
+        2454,  # Q5
+        2547,  # Q6
+        2640,  # Q7
+        2733,  # Q8
+        2826,  # Q9
+        2919,  # Q10
+    ]
+    # Chayan batch row positions (TOP-LEFT of bubbles, not centers)
+    # Detected centers: Q1≈2126, Q2≈2207, Q3≈2299; subtract 14 for top-left
+    ANSWER_ROW_POSITIONS_CHAYAN = [
+        2112,  # Q1 (center 2126 - 14)
+        2193,  # Q2 (center 2207 - 14)
+        2285,  # Q3 (center 2299 - 14)
+        2377,  # Q4
+        2469,  # Q5
+        2561,  # Q6
+        2653,  # Q7
+        2745,  # Q8
+        2837,  # Q9
+        2929,  # Q10
     ]
     ANSWER_VALUES = list('ABCD')
 
@@ -317,6 +348,23 @@ class YOLOOMRProcessor:
             OMRResult with extracted data
         """
         try:
+            # Detect batch and adjust grid origins based on filename pattern
+            # Chayan batch: files starting with "39_" have different grid alignment
+            import os
+            filename = os.path.basename(image_path)
+            self._is_chayan_batch = filename.startswith('39_')
+
+            if self._is_chayan_batch:
+                # Chayan batch - use adjusted origins
+                self.FIELD_CONFIGS['name']['origin'] = self.FIELD_CONFIGS['name'].get('origin_chayan', (164, 702))
+                self._current_answer_blocks = self.ANSWER_BLOCKS_CHAYAN
+                self._current_answer_row_positions = self.ANSWER_ROW_POSITIONS_CHAYAN
+            else:
+                # Default/Khoj batch
+                self.FIELD_CONFIGS['name']['origin'] = (189, 671)
+                self._current_answer_blocks = self.ANSWER_BLOCKS
+                self._current_answer_row_positions = self.ANSWER_ROW_POSITIONS
+
             # Load image
             image = cv2.imread(image_path)
             if image is None:
@@ -596,6 +644,75 @@ class YOLOOMRProcessor:
         except Exception:
             return None
 
+    def _detect_name_grid_origin(self, gray: np.ndarray) -> tuple:
+        """Auto-detect the name grid origin by finding bubble positions."""
+        # Use HoughCircles to detect bubbles in the name region
+        # Search a wider area to find proper grid rows
+        name_region_y1, name_region_y2 = 650, 1100  # Include more rows
+        name_region_x1, name_region_x2 = 100, 800   # Include more columns
+
+        if name_region_y2 > gray.shape[0] or name_region_x2 > gray.shape[1]:
+            return None
+
+        region = gray[name_region_y1:name_region_y2, name_region_x1:name_region_x2]
+
+        circles = cv2.HoughCircles(
+            region,
+            cv2.HOUGH_GRADIENT,
+            dp=1,
+            minDist=30,
+            param1=50,
+            param2=30,
+            minRadius=12,
+            maxRadius=20
+        )
+
+        if circles is None or len(circles[0]) < 10:
+            return None
+
+        # Adjust coordinates to full image
+        circles = circles[0]
+        adjusted = [(int(c[0] + name_region_x1), int(c[1] + name_region_y1), int(c[2])) for c in circles]
+
+        # Group bubbles into rows by y-coordinate
+        adjusted.sort(key=lambda c: c[1])
+        rows = []
+        current_row = [adjusted[0]]
+
+        for c in adjusted[1:]:
+            if abs(c[1] - current_row[0][1]) < 25:  # Same row
+                current_row.append(c)
+            else:
+                if len(current_row) >= 8:  # Valid row has at least 8 bubbles
+                    rows.append(sorted(current_row, key=lambda x: x[0]))
+                current_row = [c]
+        if len(current_row) >= 8:
+            rows.append(sorted(current_row, key=lambda x: x[0]))
+
+        # Find the topmost row that has:
+        # 1. First bubble x position around 175-210 (column 0)
+        # 2. Consistent column gap of 50-60 pixels
+        # 3. At least 10 bubbles in the row
+        for row in rows:
+            if len(row) < 10:
+                continue
+            first_bubble = row[0]
+            # Check column gap consistency
+            if len(row) >= 3:
+                gap1 = row[1][0] - row[0][0]
+                gap2 = row[2][0] - row[1][0]
+                avg_gap = (gap1 + gap2) / 2
+                # Valid bubble grid has consistent ~54 pixel gap
+                if 48 < avg_gap < 60 and abs(gap1 - gap2) < 10:
+                    # First column should start around x=175-210
+                    if 165 < first_bubble[0] < 220:
+                        # This is likely the actual bubble grid row A
+                        origin_x = first_bubble[0] - first_bubble[2]
+                        origin_y = first_bubble[1] - first_bubble[2]
+                        return (origin_x, origin_y)
+
+        return None
+
     def _process_with_grid_sampling(self, image: np.ndarray) -> OMRResult:
         """Process OMR sheet using direct grid coordinate sampling."""
         result = OMRResult(success=True)
@@ -688,12 +805,19 @@ class YOLOOMRProcessor:
 
         # If input already has spaces (from detected empty columns), preserve them
         # Just clean each word individually
+        # IMPORTANT: Keep single letters as they may be initials (common in Indian names)
         if ' ' in name:
             words = name.split()
             cleaned_words = []
             for word in words:
                 cleaned = clean_word(word)
-                if cleaned and len(cleaned) >= 2:
+                if cleaned:
+                    # Keep all words including single letters (initials)
+                    # But filter out common artifact letters if they appear alone
+                    artifact_letters = {'W', 'M', 'B', 'Q'}  # Common detection artifacts
+                    if len(cleaned) == 1 and cleaned in artifact_letters:
+                        # Skip single artifact letters
+                        continue
                     cleaned_words.append(cleaned)
             return ' '.join(cleaned_words)
 
@@ -812,21 +936,47 @@ class YOLOOMRProcessor:
         column_confidences = []
         consecutive_empty = 0  # Track consecutive empty columns
 
+        # For single-column fields (class, section), search x-offsets to handle alignment variance
+        # Different scans can have the grid shifted by 20-30 pixels
+        needs_x_search = field_name in ('class', 'section', 'roll_number', 'school_code')
+        x_offsets = [-30, -25, -20, -15, -10, -5, 0, 5, 10] if needs_x_search else [0]
+
         for col in range(num_cols):
             # For name field: stop after 3+ consecutive empty columns (name has ended)
             if field_name == 'name' and consecutive_empty >= 3:
                 break
-            x = origin[0] + col * cols_gap
+            x_base = origin[0] + col * cols_gap
 
-            # Get all bubble values in this column
-            bubble_values = []
-            for row in range(num_rows):
-                y = origin[1] + row * rows_gap
-                bw, bh = bubble_size
-                if 0 <= y < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw:
-                    bubble = gray[y:y+bh, x:x+bw]
-                    darkness = np.mean(bubble)
-                    bubble_values.append((row, darkness))
+            # Search for best x-offset (one with largest gap)
+            best_bubble_values = []
+            best_gap = -1
+            best_darkest_row = -1
+            best_darkest_val = 255
+
+            for x_offset in x_offsets:
+                x = x_base + x_offset
+
+                # Get all bubble values in this column at this offset
+                bubble_values = []
+                for row in range(num_rows):
+                    y = origin[1] + row * rows_gap
+                    bw, bh = bubble_size
+                    if 0 <= y < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw:
+                        bubble = gray[y:y+bh, x:x+bw]
+                        darkness = np.mean(bubble)
+                        bubble_values.append((row, darkness))
+
+                if len(bubble_values) >= 2:
+                    sorted_bv = sorted(bubble_values, key=lambda x: x[1])
+                    gap = sorted_bv[1][1] - sorted_bv[0][1]
+                    if gap > best_gap:
+                        best_gap = gap
+                        best_bubble_values = bubble_values
+                        best_darkest_row = sorted_bv[0][0]
+                        best_darkest_val = sorted_bv[0][1]
+
+            # Use the best offset results
+            bubble_values = best_bubble_values
 
             if not bubble_values:
                 if preserve_spaces:
@@ -834,7 +984,7 @@ class YOLOOMRProcessor:
                 column_confidences.append(0.0)
                 continue
 
-            # Sort bubbles by darkness
+            # Analyze bubble values
             all_vals = [v for _, v in bubble_values]
             median_val = np.median(all_vals)
             sorted_bubbles = sorted(bubble_values, key=lambda x: x[1])
@@ -842,6 +992,22 @@ class YOLOOMRProcessor:
             second_val = sorted_bubbles[1][1] if len(sorted_bubbles) > 1 else median_val
             gap = second_val - darkest_val
             gap_to_median = median_val - darkest_val
+
+            # For name field: if multiple bubbles are filled, pick the FIRST (topmost) one
+            # This handles cases where student fills wrong bubble first then corrects
+            if field_name == 'name':
+                # Find all bubbles that appear clearly filled
+                # Use a stricter threshold - must be significantly darker than median
+                fill_threshold = min(median_val - 40, 200)  # Stricter threshold for multi-fill detection
+                filled_bubbles = [(row, val) for row, val in bubble_values if val < fill_threshold]
+                if len(filled_bubbles) > 1:
+                    # Multiple filled - pick the topmost (smallest row index)
+                    filled_bubbles.sort(key=lambda x: x[0])  # Sort by row
+                    darkest_row, darkest_val = filled_bubbles[0]
+                elif len(filled_bubbles) == 0 and darkest_val < median_val - 20:
+                    # No bubbles pass strict threshold but darkest is reasonably filled
+                    # Keep the darkest one (original behavior)
+                    pass
 
             # Calculate confidence based on gap
             if gap > 50:
@@ -877,6 +1043,33 @@ class YOLOOMRProcessor:
                 or (gap_to_median > 12 and darkest_val < 220)
                 or (gap_to_median > 8 and darkest_val < 200)
             )
+
+            # For single-column fields (section, class), be more lenient
+            # These fields should always detect if there's ANY distinguishable filled bubble
+            if not is_filled and field_name in ('section', 'class'):
+                # Fallback 1: Even smaller gap but still darker than others
+                if gap_to_median > 5 and darkest_val < 210:
+                    is_filled = True
+                    col_conf = 0.45  # Lower confidence for edge case
+                # Fallback 2: Very dark bubble even with poor gap (artifact or heavy fill)
+                elif darkest_val < 150 and gap > 3:
+                    is_filled = True
+                    col_conf = 0.40
+                # Fallback 3: Pick darkest if it's reasonably distinct from the rest
+                elif gap > 5 and darkest_val < median_val * 0.85:
+                    is_filled = True
+                    col_conf = 0.35
+
+            # For name field, also be more lenient to catch lightly filled bubbles
+            if not is_filled and field_name == 'name':
+                # Fallback: Lower gap threshold for light fills (gap_to_median 15-20)
+                if gap_to_median > 15 and darkest_val < 228:
+                    is_filled = True
+                    col_conf = 0.50
+                # Fallback 2: Even lighter fills with reasonable gap
+                elif gap_to_median > 10 and darkest_val < 225:
+                    is_filled = True
+                    col_conf = 0.40
 
             if is_filled:
                 if darkest_row < len(values):
@@ -967,6 +1160,40 @@ class YOLOOMRProcessor:
                 if darkest_row < len(values):
                     result_chars.append(values[darkest_row])
                 continue
+
+            # For single-column fields (section, class), be more lenient before giving up
+            # These fields should always try to detect if there's ANY distinguishable filled bubble
+            if field_name in ('section', 'class'):
+                gap_to_median = median_val - darkest_val
+                # Fallback 1: Lower thresholds for gap and darkness
+                if gap > 10 and darkest_val < median_val * 0.80:
+                    if darkest_row < len(values):
+                        result_chars.append(values[darkest_row])
+                    continue
+                # Fallback 2: Very dark bubble (well filled)
+                if darkest_val < 150 and gap > 3:
+                    if darkest_row < len(values):
+                        result_chars.append(values[darkest_row])
+                    continue
+                # Fallback 3: Any reasonable gap to median
+                if gap_to_median > 5 and darkest_val < 210:
+                    if darkest_row < len(values):
+                        result_chars.append(values[darkest_row])
+                    continue
+
+            # For name field, also be more lenient to catch lightly filled bubbles
+            if field_name == 'name':
+                gap_to_median = median_val - darkest_val
+                # Fallback: Lower gap threshold for light fills
+                if gap_to_median > 15 and darkest_val < 228:
+                    if darkest_row < len(values):
+                        result_chars.append(values[darkest_row])
+                    continue
+                # Fallback 2: Even lighter fills with reasonable gap
+                if gap_to_median > 10 and darkest_val < 225:
+                    if darkest_row < len(values):
+                        result_chars.append(values[darkest_row])
+                    continue
 
             # Clear case: no bubble is significantly darker (empty column)
             if darkest_val > median_val * 0.92 and gap < 10:
@@ -1130,6 +1357,30 @@ class YOLOOMRProcessor:
                 or (gap_to_median > 8 and darkest_val < 200)   # Small gap, darker fill
             )
 
+            # For single-column fields (section, class), be more lenient
+            # These fields should always detect if there's ANY distinguishable filled bubble
+            if not is_filled and field_name in ('section', 'class'):
+                second_val = sorted_bubbles[1][1] if len(sorted_bubbles) > 1 else median_val
+                gap = second_val - darkest_val
+                # Fallback 1: Even smaller gap but still darker than others
+                if gap_to_median > 5 and darkest_val < 210:
+                    is_filled = True
+                # Fallback 2: Very dark bubble even with poor gap
+                elif darkest_val < 150 and gap > 3:
+                    is_filled = True
+                # Fallback 3: Pick darkest if it's reasonably distinct from the rest
+                elif gap > 5 and darkest_val < median_val * 0.85:
+                    is_filled = True
+
+            # For name field, also be more lenient to catch lightly filled bubbles
+            if not is_filled and field_name == 'name':
+                # Fallback: Lower gap threshold for light fills (gap_to_median 15-20)
+                if gap_to_median > 15 and darkest_val < 228:
+                    is_filled = True
+                # Fallback 2: Even lighter fills with reasonable gap
+                elif gap_to_median > 10 and darkest_val < 225:
+                    is_filled = True
+
             if is_filled:
                 if darkest_row < len(values):
                     result_chars.append(values[darkest_row])
@@ -1167,33 +1418,62 @@ class YOLOOMRProcessor:
         answers = {}
         question_confidences = []
 
-        for block in self.ANSWER_BLOCKS:
+        # Use batch-specific answer configuration
+        answer_blocks = getattr(self, '_current_answer_blocks', self.ANSWER_BLOCKS)
+        row_positions = getattr(self, '_current_answer_row_positions', self.ANSWER_ROW_POSITIONS)
+
+        for block in answer_blocks:
             origin_x = block['origin'][0]
             questions = list(block['questions'])
 
             for q_idx, q_num in enumerate(questions):
-                y_base = self.ANSWER_ROW_POSITIONS[q_idx]
+                y_base = row_positions[q_idx]
+                bw, bh = self.ANSWER_BUBBLE_SIZE
 
-                # Get darkness values for all options
-                option_values = []
-                for opt_idx in range(4):
-                    x = origin_x + opt_idx * self.ANSWER_OPTION_GAP
-                    bw, bh = self.ANSWER_BUBBLE_SIZE
-                    if 0 <= y_base < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw:
-                        bubble = gray[y_base:y_base+bh, x:x+bw]
-                        darkness = np.mean(bubble)
-                        option_values.append((opt_idx, darkness))
+                # Try multiple y offsets to handle alignment variance across scans
+                # This improves detection when bubble positions vary by a few pixels
+                best_gap = 0
+                best_option_values = []
+                best_darkest_opt = 0
+                best_darkest_val = 255
+
+                # Search both y and x offsets to handle alignment variance
+                # x: [-20, 10] for progressive block drift, y: [-15, 40] for row variance
+                for y_offset in [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30, 35, 40]:
+                    for x_offset in [-20, -15, -10, -5, 0, 5, 10]:
+                        y = y_base + y_offset
+                        if y < 0 or y >= gray.shape[0] - bh:
+                            continue
+
+                        option_values = []
+                        for opt_idx in range(4):
+                            x = origin_x + x_offset + opt_idx * self.ANSWER_OPTION_GAP
+                            if 0 <= x < gray.shape[1] - bw:
+                                bubble = gray[y:y+bh, x:x+bw]
+                                darkness = np.mean(bubble)
+                                option_values.append((opt_idx, darkness))
+
+                        if len(option_values) == 4:
+                            sorted_opts = sorted(option_values, key=lambda x: x[1])
+                            gap = sorted_opts[1][1] - sorted_opts[0][1]
+                            if gap > best_gap:
+                                best_gap = gap
+                                best_option_values = option_values
+                                best_darkest_opt = sorted_opts[0][0]
+                                best_darkest_val = sorted_opts[0][1]
+
+                option_values = best_option_values
+                darkest_opt = best_darkest_opt
+                darkest_val = best_darkest_val
+                gap = best_gap
 
                 if not option_values:
                     answers[q_num] = ''
                     question_confidences.append(0.0)
                     continue
 
-                # Sort by darkness
                 sorted_opts = sorted(option_values, key=lambda x: x[1])
-                darkest_opt, darkest_val = sorted_opts[0]
                 second_val = sorted_opts[1][1] if len(sorted_opts) > 1 else 255
-                gap = second_val - darkest_val
 
                 # Calculate confidence based on gap
                 if gap > 50:
@@ -1209,15 +1489,18 @@ class YOLOOMRProcessor:
                 else:
                     q_conf = 0.35  # Low confidence
 
-                # Detection logic
+                # Detection logic - thresholds calibrated for various fill qualities
+                # Relaxed thresholds to handle alignment variance across scans
                 detected = False
-                if gap > 40 and darkest_val < 180:
+                if gap >= 35 and darkest_val < 200:  # Strong contrast
                     detected = True
-                elif gap > 25 and darkest_val < 150:
+                elif gap >= 20 and darkest_val < 190:  # Good contrast
                     detected = True
-                elif gap > 15 and darkest_val < 120:
+                elif gap >= 12 and darkest_val < 185:  # Moderate contrast
                     detected = True
-                elif gap > 10 and darkest_val < 80:
+                elif gap >= 8 and darkest_val < 175:   # Light fills with some gap
+                    detected = True
+                elif gap >= 5 and darkest_val < 160:   # Dark fills with small gap
                     detected = True
 
                 # Check for multi-marked
@@ -1255,12 +1538,16 @@ class YOLOOMRProcessor:
         answers = {}
         bw, bh = self.ANSWER_BUBBLE_SIZE
 
-        for block in self.ANSWER_BLOCKS:
+        # Use batch-specific answer configuration
+        answer_blocks = getattr(self, '_current_answer_blocks', self.ANSWER_BLOCKS)
+        row_positions = getattr(self, '_current_answer_row_positions', self.ANSWER_ROW_POSITIONS)
+
+        for block in answer_blocks:
             origin_x = block['origin'][0]
             questions = list(block['questions'])
 
             for q_idx, q_num in enumerate(questions):
-                y_base = self.ANSWER_ROW_POSITIONS[q_idx]
+                y_base = row_positions[q_idx]
 
                 # Extract all 4 option bubbles
                 bubbles = []
@@ -1313,13 +1600,17 @@ class YOLOOMRProcessor:
         """Sample answers using threshold-based detection (fallback)."""
         answers = {}
 
-        for block in self.ANSWER_BLOCKS:
+        # Use batch-specific answer configuration
+        answer_blocks = getattr(self, '_current_answer_blocks', self.ANSWER_BLOCKS)
+        row_positions = getattr(self, '_current_answer_row_positions', self.ANSWER_ROW_POSITIONS)
+
+        for block in answer_blocks:
             origin_x = block['origin'][0]
             questions = list(block['questions'])
 
             for q_idx, q_num in enumerate(questions):
                 # Use calibrated row positions (non-uniform spacing)
-                y_base = self.ANSWER_ROW_POSITIONS[q_idx]
+                y_base = row_positions[q_idx]
 
                 # Get darkness values for all options (A, B, C, D)
                 option_values = []
