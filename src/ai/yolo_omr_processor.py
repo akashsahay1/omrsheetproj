@@ -792,8 +792,12 @@ class YOLOOMRProcessor:
         def clean_word(word):
             """Clean a single word of garbage characters."""
             w = word
-            # Remove repeated characters (WWWW -> W, MMM -> M)
-            w = re.sub(r'([A-Z])\1{2,}', r'\1', w)
+            # Remove repeated ARTIFACT characters (WWWW -> W, MMM -> M, BBB -> B)
+            # But NOT repeated vowels or common consonants which could be legitimate
+            # (e.g., "AAA" might be a test entry or legitimate repeated letter)
+            artifact_chars = 'WMB'  # Characters that are commonly repeated artifacts
+            for c in artifact_chars:
+                w = re.sub(rf'{c}{{3,}}', c, w)  # Only collapse 3+ of same artifact char
             # Remove trailing W, M, B (common artifacts)
             w = re.sub(r'[WMB]+$', '', w)
             # Remove trailing patterns like WK, MW, BM
@@ -888,7 +892,8 @@ class YOLOOMRProcessor:
 
         # Step 5: Build final name
         parts = []
-        if first_name and len(first_name) >= 2:
+        # Keep first name if it's at least 2 chars, OR if it's all we have (no surnames)
+        if first_name and (len(first_name) >= 2 or not found_surnames):
             parts.append(first_name)
         parts.extend(found_surnames)
         name = ' '.join(parts)
@@ -1383,14 +1388,27 @@ class YOLOOMRProcessor:
 
         preserve_spaces = (field_name == 'name')
         result_chars = []
+        consecutive_empty = 0  # Track consecutive empty columns for name field
+
+        # For name field: calibrate both Y and X offsets for alignment
+        # Different scans can have shifts of 10-40 pixels in both directions
+        y_offset = 0
+        x_offset_calibrated = 0
+        if field_name == 'name':
+            y_offset = self._calibrate_name_y_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows)
+            x_offset_calibrated = self._calibrate_name_x_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows, y_offset)
 
         for col in range(num_cols):
-            x = origin[0] + col * cols_gap
+            # For name field: stop after 3+ consecutive empty columns (name has ended)
+            if field_name == 'name' and consecutive_empty >= 3:
+                break
+
+            x = origin[0] + col * cols_gap + x_offset_calibrated
 
             # Extract all bubbles in this column
             bubbles_data = []
             for row in range(num_rows):
-                y = origin[1] + row * rows_gap
+                y = origin[1] + y_offset + row * rows_gap
                 bw, bh = bubble_size
 
                 if 0 <= y < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw:
@@ -1424,12 +1442,14 @@ class YOLOOMRProcessor:
             if gap > 50 and darkest_val < median_val * 0.75:
                 if darkest_row < len(values):
                     result_chars.append(values[darkest_row])
+                    consecutive_empty = 0
                 continue
 
             # Medium confidence: moderate gap with relative darkness check
             if gap > 30 and darkest_val < median_val * 0.65:
                 if darkest_row < len(values):
                     result_chars.append(values[darkest_row])
+                    consecutive_empty = 0
                 continue
 
             # For single-column fields (section, class), be more lenient before giving up
@@ -1440,16 +1460,19 @@ class YOLOOMRProcessor:
                 if gap > 10 and darkest_val < median_val * 0.80:
                     if darkest_row < len(values):
                         result_chars.append(values[darkest_row])
+                        consecutive_empty = 0
                     continue
                 # Fallback 2: Very dark bubble (well filled)
                 if darkest_val < 150 and gap > 3:
                     if darkest_row < len(values):
                         result_chars.append(values[darkest_row])
+                        consecutive_empty = 0
                     continue
                 # Fallback 3: Any reasonable gap to median
                 if gap_to_median > 5 and darkest_val < 210:
                     if darkest_row < len(values):
                         result_chars.append(values[darkest_row])
+                        consecutive_empty = 0
                     continue
 
             # For name field, also be more lenient to catch lightly filled bubbles
@@ -1459,17 +1482,20 @@ class YOLOOMRProcessor:
                 if gap_to_median > 15 and darkest_val < 228:
                     if darkest_row < len(values):
                         result_chars.append(values[darkest_row])
+                        consecutive_empty = 0
                     continue
                 # Fallback 2: Even lighter fills with reasonable gap
                 if gap_to_median > 10 and darkest_val < 225:
                     if darkest_row < len(values):
                         result_chars.append(values[darkest_row])
+                        consecutive_empty = 0
                     continue
 
             # Clear case: no bubble is significantly darker (empty column)
             if darkest_val > median_val * 0.92 and gap < 10:
                 if preserve_spaces:
                     result_chars.append(' ')
+                    consecutive_empty += 1
                 continue
 
             # Uncertain case: use ML classifier
@@ -1488,8 +1514,10 @@ class YOLOOMRProcessor:
                 best_row, _ = max(filled_bubbles, key=lambda x: x[1])
                 if best_row < len(values):
                     result_chars.append(values[best_row])
+                    consecutive_empty = 0
             elif preserve_spaces:
                 result_chars.append(' ')
+                consecutive_empty += 1
 
         result = ''.join(result_chars)
 
