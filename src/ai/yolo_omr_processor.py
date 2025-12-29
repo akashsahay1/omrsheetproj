@@ -1002,6 +1002,118 @@ class YOLOOMRProcessor:
         # Fallback to highest scoring offset
         return offset_scores[0][0] if offset_scores else 0
 
+    def _calibrate_name_x_offset(self, gray: np.ndarray, origin: Tuple[int, int],
+                                  bubble_size: Tuple[int, int], rows_gap: int,
+                                  cols_gap: int, num_rows: int, y_offset: int) -> int:
+        """Calibrate X offset for name field by finding alignment with best bubble detection.
+
+        Different scans can have horizontal shifts of 10-30 pixels. This finds the
+        x_offset that produces the clearest bubble detection (largest gaps).
+        """
+        x_offsets_to_test = list(range(-40, 20, 5))
+        offset_scores = []
+
+        # Test on first 5 columns
+        test_cols = list(range(5))
+
+        for x_offset in x_offsets_to_test:
+            gaps = []
+
+            for col in test_cols:
+                x = origin[0] + col * cols_gap + x_offset
+
+                bubble_values = []
+                for row in range(num_rows):
+                    y = origin[1] + y_offset + row * rows_gap
+                    bw, bh = bubble_size
+                    if 0 <= y < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw:
+                        bubble = gray[y:y+bh, x:x+bw]
+                        darkness = np.mean(bubble)
+                        bubble_values.append(darkness)
+
+                if len(bubble_values) >= 2:
+                    sorted_vals = sorted(bubble_values)
+                    gap = sorted_vals[1] - sorted_vals[0]
+                    gaps.append(gap)
+
+            if len(gaps) >= 3:
+                good_gaps = [g for g in gaps if g > 30]
+                if good_gaps:
+                    score = len(good_gaps) * np.mean(good_gaps)
+                    offset_scores.append((x_offset, score))
+
+        # Sort by score descending
+        offset_scores.sort(key=lambda x: x[1], reverse=True)
+
+        return offset_scores[0][0] if offset_scores else 0
+
+    def _check_corridor_fill(self, gray: np.ndarray, x: int, y: int, bubble_size: Tuple[int, int]) -> Tuple[bool, float]:
+        """Check if a bubble is filled by examining the corridor between letter and bubble edge.
+
+        The corridor is the area between the printed letter (center) and the bubble outline (edge).
+        If this area is dark, the bubble is filled. If it's light, only the printed letter is visible.
+
+        Args:
+            gray: Grayscale image
+            x: X coordinate of bubble top-left
+            y: Y coordinate of bubble top-left
+            bubble_size: (width, height) of bubble
+
+        Returns:
+            (is_filled, corridor_mean): Whether the bubble appears filled and the mean corridor darkness
+        """
+        bw, bh = bubble_size
+        bubble = gray[y:y+bh, x:x+bw]
+
+        # Center of bubble
+        cx, cy = bw // 2, bh // 2
+
+        # Sample points in the corridor - between letter center and bubble edge
+        # These points should be in the area that gets filled when marking the bubble
+        # but are NOT part of the printed letter itself
+        check_points = [
+            # Top corridor (above letter, below bubble edge)
+            (6, cx), (7, cx - 2), (7, cx + 2), (6, cx - 4), (6, cx + 4),
+            # Bottom corridor
+            (bh - 7, cx), (bh - 8, cx - 2), (bh - 8, cx + 2), (bh - 7, cx - 4), (bh - 7, cx + 4),
+            # Left corridor
+            (cy, 6), (cy - 2, 7), (cy + 2, 7), (cy - 4, 6), (cy + 4, 6),
+            # Right corridor
+            (cy, bw - 7), (cy - 2, bw - 8), (cy + 2, bw - 8), (cy - 4, bw - 7), (cy + 4, bw - 7),
+        ]
+
+        corridor_values = []
+        for py, px in check_points:
+            if 0 <= py < bh and 0 <= px < bw:
+                corridor_values.append(bubble[py, px])
+
+        if not corridor_values:
+            return False, 255.0
+
+        corridor_mean = np.mean(corridor_values)
+        very_dark_count = sum(1 for v in corridor_values if v < 100)
+        dark_count = sum(1 for v in corridor_values if v < 150)
+        very_dark_ratio = very_dark_count / len(corridor_values)
+        dark_ratio = dark_count / len(corridor_values)
+
+        # Check the entire bubble for very dark pixels
+        bubble = gray[y:y+bh, x:x+bw]
+        total_very_dark = np.sum(bubble < 50)
+
+        # A bubble is filled if it has significantly more very dark pixels
+        # than just the printed letter (which typically has ~100-130 pixels < 50)
+        # OR if the corridor shows clear fill indicators
+        # IMPORTANT: Must have at least some very dark pixels (>80) to be considered filled
+        # This prevents false positives from moderately dark printed letters
+        has_minimum_dark = total_very_dark > 80
+        is_filled = (
+            total_very_dark > 150 or  # More dark pixels than typical printed letter
+            (has_minimum_dark and corridor_mean < 170 and dark_ratio > 0.30) or  # Corridor shows fill
+            (has_minimum_dark and corridor_mean < 180 and very_dark_ratio > 0.20)  # Very dark in corridor
+        )
+
+        return is_filled, corridor_mean
+
     def _sample_field(self, gray: np.ndarray, field_name: str) -> str:
         """Sample a field by reading bubble darkness at grid coordinates."""
         # Use hybrid approach if ML classifier is available
@@ -1041,17 +1153,19 @@ class YOLOOMRProcessor:
         needs_x_search = field_name in ('class', 'section', 'roll_number', 'school_code')
         x_offsets = [-30, -25, -20, -15, -10, -5, 0, 5, 10] if needs_x_search else [0]
 
-        # For name field: calibrate y-offset once by finding alignment with best detection
-        # Different scans can have vertical shifts of 10-40 pixels
+        # For name field: calibrate both Y and X offsets for alignment
+        # Different scans can have shifts of 10-40 pixels in both directions
         y_offset = 0
+        x_offset_calibrated = 0
         if field_name == 'name':
             y_offset = self._calibrate_name_y_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows)
+            x_offset_calibrated = self._calibrate_name_x_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows, y_offset)
 
         for col in range(num_cols):
             # For name field: stop after 3+ consecutive empty columns (name has ended)
             if field_name == 'name' and consecutive_empty >= 3:
                 break
-            x_base = origin[0] + col * cols_gap
+            x_base = origin[0] + col * cols_gap + x_offset_calibrated
 
             # Search for best x-offset (one with largest gap)
             best_bubble_values = []
@@ -1099,21 +1213,36 @@ class YOLOOMRProcessor:
             gap = second_val - darkest_val
             gap_to_median = median_val - darkest_val
 
-            # For name field: if multiple bubbles are filled, pick the FIRST (topmost) one
-            # This handles cases where student fills wrong bubble first then corrects
+            # For name field: use corridor-based detection to distinguish
+            # between dark printed letters and actual pencil fills
+            corridor_validated = False
             if field_name == 'name':
-                # Find all bubbles that appear clearly filled
-                # Use a stricter threshold - must be significantly darker than median
-                fill_threshold = min(median_val - 40, 200)  # Stricter threshold for multi-fill detection
-                filled_bubbles = [(row, val) for row, val in bubble_values if val < fill_threshold]
-                if len(filled_bubbles) > 1:
-                    # Multiple filled - pick the topmost (smallest row index)
-                    filled_bubbles.sort(key=lambda x: x[0])  # Sort by row
-                    darkest_row, darkest_val = filled_bubbles[0]
-                elif len(filled_bubbles) == 0 and darkest_val < median_val - 20:
-                    # No bubbles pass strict threshold but darkest is reasonably filled
-                    # Keep the darkest one (original behavior)
-                    pass
+                # For each candidate bubble, check if the corridor (area between
+                # letter and bubble edge) is dark - this proves actual fill vs just dark printing
+                candidates_with_corridor = []
+                for row, val in bubble_values:
+                    if val < 210:  # Only check bubbles that might be filled
+                        bubble_y = origin[1] + y_offset + row * rows_gap
+                        bubble_x = x_base
+                        corridor_filled, corridor_mean = self._check_corridor_fill(
+                            gray, bubble_x, bubble_y, bubble_size
+                        )
+                        candidates_with_corridor.append((row, val, corridor_filled, corridor_mean))
+
+                # Find bubbles that pass corridor check
+                corridor_passed = [(r, v, cm) for r, v, cf, cm in candidates_with_corridor if cf]
+
+                if corridor_passed:
+                    # Use the darkest bubble that passes corridor check
+                    corridor_passed.sort(key=lambda x: x[1])  # Sort by darkness
+                    darkest_row, darkest_val, _ = corridor_passed[0]
+                    corridor_validated = True
+                else:
+                    # No bubbles pass corridor check - might be very light fill
+                    # Fall back to checking if darkest bubble has very dark mean
+                    if darkest_val < 170:  # Very dark = probably filled
+                        corridor_validated = True
+                    # Otherwise, column might be empty or have only printed letter darkness
 
             # Calculate confidence based on gap
             if gap > 50:
@@ -1178,9 +1307,16 @@ class YOLOOMRProcessor:
                 is_filled = True
                 col_conf = 0.70  # Slightly lower confidence for light fills
 
+            # Very strong gap_to_median (>45) with reasonable darkness proves fill even with
+            # slightly lower gap. The huge gap_to_median means this bubble clearly stands out.
+            if not is_filled and darkest_val < 190 and gap_to_median > 45 and gap > 20:
+                is_filled = True
+                col_conf = 0.65
+
             # Very light fills (195-205) need even stronger gaps AND second-darkest must be clearly unfilled
             # If second-darkest is also dark (<206), the column has print quality variance, not a real fill
-            if not is_filled and darkest_val < 205 and gap_to_median > 35 and gap > 20 and second_val > 206:
+            # NOTE: Don't apply to name field as it causes false positives - name field has its own thresholds
+            if not is_filled and darkest_val < 205 and gap_to_median > 40 and gap > 25 and second_val > 210 and field_name != 'name':
                 is_filled = True
                 col_conf = 0.55
 
@@ -1193,16 +1329,18 @@ class YOLOOMRProcessor:
                     is_filled = True
                     col_conf = 0.40
 
-            # For name field, allow slightly lighter fills but require second-darkest to be clearly unfilled
-            # This prevents false positives from columns with print quality variance
+            # For name field: use corridor validation as primary check
+            # The corridor check examines the area between the printed letter and bubble edge
+            # A filled bubble has dark corridor; an unfilled bubble (just printed letter) has light corridor
             if not is_filled and field_name == 'name':
-                if darkest_val < 195 and gap_to_median > 35 and gap > 20 and second_val > 206:
+                if corridor_validated:
+                    # Corridor check passed - bubble is actually filled
                     is_filled = True
-                    col_conf = 0.55
-                elif darkest_val < 180 and gap_to_median > 25 and gap > 15:
-                    # Darker fills can have smaller gaps
+                    col_conf = 0.70
+                elif darkest_val < 160:
+                    # Very dark bubble - likely filled even if corridor check marginal
                     is_filled = True
-                    col_conf = 0.60
+                    col_conf = 0.65
 
             if is_filled:
                 if darkest_row < len(values):

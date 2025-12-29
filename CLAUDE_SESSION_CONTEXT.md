@@ -71,8 +71,75 @@ Dynamic scaling test made detection **worse**, confirming aspect ratio is not th
 - `test_aspect_ratio.py` - Aspect ratio analysis
 - `test_dynamic_detection.py` - Dynamic vs fixed bubble detection comparison
 
-## Next Steps (If Needed)
+## Session 2: 11652B.jpg "SAMIR LOHAR" Detection
 
-1. Further tune the `second_val` threshold (currently 206)
-2. Investigate multi-fill logic at column 15 (N vs D selection)
-3. Consider per-column print quality normalization
+**Date:** 2024-12-29
+**Issue:** Detected "SAMIR LOHRR" instead of "SAMIR LOHAR"
+
+### Investigation Findings
+
+#### Column 9 (Expected: A, Detected: R)
+
+| Metric | Value |
+|--------|-------|
+| A darkness | 212.9 |
+| R darkness | 183.8 |
+| Column median | 231.3 |
+| Gap (R to 2nd) | 29.1 |
+| Gap to median | 47.6 |
+
+**Finding:** R is 29.1 points DARKER than A. The algorithm correctly picked the darkest bubble.
+
+#### Column 10 (User says R unfilled, but Detected: R)
+
+| Metric | Value |
+|--------|-------|
+| A darkness | 235.3 (empty) |
+| R darkness | 189.4 |
+| Column median | 231.2 |
+| Gap (R to 2nd) | 32.9 |
+| Gap to median | 41.8 |
+
+**Finding:** R has visible dark shading in the scanned image even though user claims it was unfilled.
+
+### Root Cause Analysis
+
+Visual inspection of the debug image (`problem_area_11652B.jpg`) confirms:
+- Row R bubbles in columns 9 and 10 have **visible dark marks/shading**
+- Row A in column 9 appears **empty/unfilled** (light gray like other empty bubbles)
+- Row R is only dark in columns 9 and 10, not across all columns (rules out grid misalignment)
+
+**Conclusion:** The algorithm is working correctly. The scanned image shows marks in the R bubbles that weren't intended as fills. Possible causes:
+1. Student accidentally marked R while filling
+2. Stains or smudges on paper
+3. Bleed-through from back of sheet
+4. Pencil marks from erasing
+
+### Changes Made (Session 2)
+
+1. **Multi-fill logic improved** (lines 1106-1130): If darkness_gap > 10, pick darkest; else pick topmost
+2. **Fill threshold tightened**: `min(median_val - 45, 190)` for multi-fill detection
+3. **Name field threshold**: Added `gap_to_median >= 37` for name field with print quality variance
+
+### Key Insight
+
+Not all detection "errors" are algorithm bugs. Some are legitimate marks on the physical OMR sheet that the algorithm correctly detects. These cases require:
+- Manual review interface for operators
+- Stricter thresholds (trade-off: may miss light fills)
+- Image preprocessing to reduce bleed-through
+
+## Test Files
+
+- `test_traindata.py` - Random sample testing from `/Volumes/Projects/traindata/`
+- `test_aspect_ratio.py` - Aspect ratio analysis
+- `test_dynamic_detection.py` - Dynamic vs fixed bubble detection
+- `test_origin_adjustment.py` - Grid origin calibration
+- `analyze_lohar_issue.py` - Column 9/10 analysis for 11652B
+- `analyze_row_pattern.py` - Row pattern analysis
+- `visualize_problem_bubbles.py` - Visual debugging
+
+## Debug Images
+
+- `problem_area_11652B.jpg` - Annotated problem columns 9-10
+- `debug_row_pattern.jpg` - Row R pattern across columns
+- `debug_lohar_cols.jpg` - Column analysis visualization
