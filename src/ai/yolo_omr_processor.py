@@ -106,7 +106,7 @@ class YOLOOMRProcessor:
             # Detected bubble centers at (180, 718), subtract half bubble_size for top-left
             # Default origin - will be adjusted per-image based on batch detection
             'origin': (189, 671),  # Works for Khoj batch (most common)
-            'origin_chayan': (164, 702),  # Works for Chayan batch (39_*.jpg files)
+            'origin_chayan': (180, 710),  # Recalibrated for Chayan batch (39_*.jpg files)
             'bubble_size': (33, 33),
             'rows_gap': 52,  # Vertical distance between A,B,C... rows
             'cols_gap': 54,  # Horizontal distance between letter columns
@@ -356,7 +356,7 @@ class YOLOOMRProcessor:
 
             if self._is_chayan_batch:
                 # Chayan batch - use adjusted origins
-                self.FIELD_CONFIGS['name']['origin'] = self.FIELD_CONFIGS['name'].get('origin_chayan', (164, 702))
+                self.FIELD_CONFIGS['name']['origin'] = self.FIELD_CONFIGS['name'].get('origin_chayan', (180, 710))
                 self._current_answer_blocks = self.ANSWER_BLOCKS_CHAYAN
                 self._current_answer_row_positions = self.ANSWER_ROW_POSITIONS_CHAYAN
             else:
@@ -902,6 +902,106 @@ class YOLOOMRProcessor:
 
         return name
 
+    def _calibrate_name_y_offset(self, gray: np.ndarray, origin: Tuple[int, int],
+                                  bubble_size: Tuple[int, int], rows_gap: int,
+                                  cols_gap: int, num_rows: int) -> int:
+        """Find the best Y offset for name field alignment.
+
+        Different scans can have vertical misalignment of 10-40 pixels.
+        This method samples columns and finds the offset that gives
+        the best bubble separation (largest gaps between filled and unfilled).
+
+        Uses gap-based scoring with validation to reject garbage patterns.
+
+        Returns:
+            Best y_offset to apply (can be positive or negative)
+        """
+        # Test columns 0-9 (first 10 letters of name)
+        test_cols = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        # Chayan files typically need negative offsets, limit positive range
+        # Khoj files can need either direction
+        if hasattr(self, '_is_chayan_batch') and self._is_chayan_batch:
+            y_offsets_to_test = list(range(-60, 15, 5))  # -60 to +10 for Chayan
+        else:
+            y_offsets_to_test = list(range(-60, 55, 5))  # Full range for Khoj
+
+        # Collect scores for all offsets
+        offset_scores = []
+
+        for y_offset in y_offsets_to_test:
+            gaps = []
+
+            for col in test_cols:
+                x = origin[0] + col * cols_gap
+
+                # Sample all rows at this offset
+                bubble_values = []
+                for row in range(num_rows):
+                    y = origin[1] + y_offset + row * rows_gap
+                    bw, bh = bubble_size
+                    if 0 <= y < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw:
+                        bubble = gray[y:y+bh, x:x+bw]
+                        darkness = np.mean(bubble)
+                        bubble_values.append(darkness)
+
+                if len(bubble_values) >= 2:
+                    sorted_vals = sorted(bubble_values)
+                    gap = sorted_vals[1] - sorted_vals[0]
+                    gaps.append(gap)
+
+            if len(gaps) >= 3:
+                good_gaps = [g for g in gaps if g > 30]
+                if good_gaps:
+                    score = len(good_gaps) * np.mean(good_gaps)
+                    offset_scores.append((y_offset, score))
+
+        # Sort by score descending
+        offset_scores.sort(key=lambda x: x[1], reverse=True)
+
+        # Try top candidates and validate detected pattern
+        values = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        vowels = set('AEIOU')
+        # Rare letter pairs in Indian names (suggest wrong alignment)
+        garbage_patterns = {'QA', 'QS', 'QU', 'QO', 'QE', 'QI', 'LQ', 'ZQ', 'XQ',
+                           'JQ', 'ZZ', 'QQ', 'XX', 'JJ', 'ZJ', 'JZ', 'XZ', 'ZX'}
+
+        for y_offset, score in offset_scores[:5]:  # Try top 5 candidates
+            # Quick detection at this offset
+            detected_letters = []
+            for col in range(8):  # Check first 8 columns
+                x = origin[0] + col * cols_gap
+                bubble_data = []
+                for row in range(num_rows):
+                    y = origin[1] + y_offset + row * rows_gap
+                    bw, bh = bubble_size
+                    if 0 <= y < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw:
+                        bubble = gray[y:y+bh, x:x+bw]
+                        darkness = np.mean(bubble)
+                        bubble_data.append((row, darkness))
+
+                if bubble_data:
+                    sorted_bv = sorted(bubble_data, key=lambda x: x[1])
+                    darkest_row, darkest_val = sorted_bv[0]
+                    median_val = np.median([v for _, v in bubble_data])
+                    gap_to_median = median_val - darkest_val
+
+                    if darkest_val < 180 and gap_to_median > 25:
+                        detected_letters.append(values[darkest_row])
+
+            # Validate detected pattern
+            if len(detected_letters) >= 3:
+                detected_str = ''.join(detected_letters)
+                # Check for garbage patterns
+                has_garbage = any(p in detected_str for p in garbage_patterns)
+                # Check for at least one vowel in first 6 letters
+                has_vowel = any(c in vowels for c in detected_str[:6])
+
+                if not has_garbage and has_vowel:
+                    return y_offset  # Valid pattern found
+
+        # Fallback to highest scoring offset
+        return offset_scores[0][0] if offset_scores else 0
+
     def _sample_field(self, gray: np.ndarray, field_name: str) -> str:
         """Sample a field by reading bubble darkness at grid coordinates."""
         # Use hybrid approach if ML classifier is available
@@ -941,6 +1041,12 @@ class YOLOOMRProcessor:
         needs_x_search = field_name in ('class', 'section', 'roll_number', 'school_code')
         x_offsets = [-30, -25, -20, -15, -10, -5, 0, 5, 10] if needs_x_search else [0]
 
+        # For name field: calibrate y-offset once by finding alignment with best detection
+        # Different scans can have vertical shifts of 10-40 pixels
+        y_offset = 0
+        if field_name == 'name':
+            y_offset = self._calibrate_name_y_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows)
+
         for col in range(num_cols):
             # For name field: stop after 3+ consecutive empty columns (name has ended)
             if field_name == 'name' and consecutive_empty >= 3:
@@ -959,7 +1065,7 @@ class YOLOOMRProcessor:
                 # Get all bubble values in this column at this offset
                 bubble_values = []
                 for row in range(num_rows):
-                    y = origin[1] + row * rows_gap
+                    y = origin[1] + y_offset + row * rows_gap  # Apply y_offset for alignment
                     bw, bh = bubble_size
                     if 0 <= y < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw:
                         bubble = gray[y:y+bh, x:x+bw]
@@ -1036,40 +1142,67 @@ class YOLOOMRProcessor:
                 continue
 
             # Detection logic for filled bubbles
-            # Use same threshold for all fields - the original calibrated values work well
-            is_filled = (
-                (gap_to_median > 40 and darkest_val < 235)
-                or (gap_to_median > 20 and darkest_val < 230)
-                or (gap_to_median > 12 and darkest_val < 220)
-                or (gap_to_median > 8 and darkest_val < 200)
-            )
+            # Key insight: A FILLED bubble has darkness typically 40-150
+            # An EMPTY bubble has darkness typically 200-230
+            # We must check BOTH:
+            #   1. Absolute darkness threshold (must be dark enough to be filled)
+            #   2. Relative gap (must stand out from other bubbles)
+            #
+            # Detection thresholds:
+            # - Empty bubbles: typically 200-230 darkness, gap_to_median < 15
+            # - Filled bubbles: typically 50-180 darkness, gap_to_median > 30
+            # - Light fills: 175-195 darkness BUT with strong gap (> 40)
+            #
+            # Key insight: A strong gap_to_median (> 40) indicates a clearly filled
+            # bubble even if the absolute darkness is lighter than usual.
 
-            # For single-column fields (section, class), be more lenient
-            # These fields should always detect if there's ANY distinguishable filled bubble
+            is_filled = False
+
+            # Primary detection: bubble must be reasonably dark AND stand out
+            if darkest_val < 180:  # Normal fills
+                if gap_to_median > 30:  # Strong gap = high confidence
+                    is_filled = True
+                elif gap_to_median > 15 and darkest_val < 160:  # Medium gap, darker fill
+                    is_filled = True
+                elif gap_to_median > 8 and darkest_val < 140:  # Small gap, very dark fill
+                    is_filled = True
+
+            # Light fills with STRONG gap - the gap proves it's filled even if light
+            # This catches bubbles in the 180-195 range that clearly stand out
+            # IMPORTANT: Require BOTH conditions to avoid false positives:
+            #   1. gap_to_median > 40 (stands out from column median)
+            #   2. gap > 25 (stands out from second-darkest - not just random variation)
+            # The gap > 25 check prevents false positives where one bubble happens to be
+            # slightly darker due to print quality but doesn't stand out from other bubbles
+            if not is_filled and darkest_val < 195 and gap_to_median > 40 and gap > 25:
+                is_filled = True
+                col_conf = 0.70  # Slightly lower confidence for light fills
+
+            # Very light fills (195-205) need even stronger gaps AND second-darkest must be clearly unfilled
+            # If second-darkest is also dark (<206), the column has print quality variance, not a real fill
+            if not is_filled and darkest_val < 205 and gap_to_median > 35 and gap > 20 and second_val > 206:
+                is_filled = True
+                col_conf = 0.55
+
+            # For single-column fields (section, class), slightly more lenient
             if not is_filled and field_name in ('section', 'class'):
-                # Fallback 1: Even smaller gap but still darker than others
-                if gap_to_median > 5 and darkest_val < 210:
+                if darkest_val < 175 and gap_to_median > 10:
                     is_filled = True
-                    col_conf = 0.45  # Lower confidence for edge case
-                # Fallback 2: Very dark bubble even with poor gap (artifact or heavy fill)
-                elif darkest_val < 150 and gap > 3:
+                    col_conf = 0.45
+                elif darkest_val < 150 and gap > 5:
                     is_filled = True
                     col_conf = 0.40
-                # Fallback 3: Pick darkest if it's reasonably distinct from the rest
-                elif gap > 5 and darkest_val < median_val * 0.85:
-                    is_filled = True
-                    col_conf = 0.35
 
-            # For name field, also be more lenient to catch lightly filled bubbles
+            # For name field, allow slightly lighter fills but require second-darkest to be clearly unfilled
+            # This prevents false positives from columns with print quality variance
             if not is_filled and field_name == 'name':
-                # Fallback: Lower gap threshold for light fills (gap_to_median 15-20)
-                if gap_to_median > 15 and darkest_val < 228:
+                if darkest_val < 195 and gap_to_median > 35 and gap > 20 and second_val > 206:
                     is_filled = True
-                    col_conf = 0.50
-                # Fallback 2: Even lighter fills with reasonable gap
-                elif gap_to_median > 10 and darkest_val < 225:
+                    col_conf = 0.55
+                elif darkest_val < 180 and gap_to_median > 25 and gap > 15:
+                    # Darker fills can have smaller gaps
                     is_filled = True
-                    col_conf = 0.40
+                    col_conf = 0.60
 
             if is_filled:
                 if darkest_row < len(values):
