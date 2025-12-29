@@ -792,12 +792,10 @@ class YOLOOMRProcessor:
         def clean_word(word):
             """Clean a single word of garbage characters."""
             w = word
-            # Remove repeated ARTIFACT characters (WWWW -> W, MMM -> M, BBB -> B)
-            # But NOT repeated vowels or common consonants which could be legitimate
-            # (e.g., "AAA" might be a test entry or legitimate repeated letter)
-            artifact_chars = 'WMB'  # Characters that are commonly repeated artifacts
-            for c in artifact_chars:
-                w = re.sub(rf'{c}{{3,}}', c, w)  # Only collapse 3+ of same artifact char
+            # Remove repeated ARTIFACT characters only (WWWW -> W, MMM -> M, BBB -> B)
+            # Don't collapse other repeated letters (AAA might be legitimate)
+            for c in 'WMB':
+                w = re.sub(rf'{c}{{3,}}', c, w)
             # Remove trailing W, M, B (common artifacts)
             w = re.sub(r'[WMB]+$', '', w)
             # Remove trailing patterns like WK, MW, BM
@@ -1388,10 +1386,9 @@ class YOLOOMRProcessor:
 
         preserve_spaces = (field_name == 'name')
         result_chars = []
-        consecutive_empty = 0  # Track consecutive empty columns for name field
+        consecutive_empty = 0
 
-        # For name field: calibrate both Y and X offsets for alignment
-        # Different scans can have shifts of 10-40 pixels in both directions
+        # For name field: calibrate Y and X offsets for alignment
         y_offset = 0
         x_offset_calibrated = 0
         if field_name == 'name':
@@ -1399,7 +1396,7 @@ class YOLOOMRProcessor:
             x_offset_calibrated = self._calibrate_name_x_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows, y_offset)
 
         for col in range(num_cols):
-            # For name field: stop after 3+ consecutive empty columns (name has ended)
+            # Stop after 3 consecutive empty columns for name field
             if field_name == 'name' and consecutive_empty >= 3:
                 break
 
@@ -1419,6 +1416,7 @@ class YOLOOMRProcessor:
             if not bubbles_data:
                 if preserve_spaces:
                     result_chars.append(' ')
+                    consecutive_empty += 1
                 continue
 
             # Sort by darkness to find candidates
