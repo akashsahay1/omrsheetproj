@@ -1066,13 +1066,19 @@ class YOLOOMRProcessor:
                         bubble_data.append((row, darkness))
 
                 if bubble_data:
-                    sorted_bv = sorted(bubble_data, key=lambda x: x[1])
-                    darkest_row, darkest_val = sorted_bv[0]
                     median_val = np.median([v for _, v in bubble_data])
-                    gap_to_median = median_val - darkest_val
+                    # Find ALL bubbles that qualify as filled, then pick FIRST one
+                    filled_candidates = []
+                    for row, darkness in bubble_data:
+                        bubble_gap = median_val - darkness
+                        if darkness < 180 and bubble_gap > 25:
+                            filled_candidates.append((row, darkness))
 
-                    if darkest_val < 180 and gap_to_median > 25:
-                        detected_letters.append(values[darkest_row])
+                    if filled_candidates:
+                        # Pick the FIRST filled (lowest row number)
+                        filled_candidates.sort(key=lambda x: x[0])
+                        best_row = filled_candidates[0][0]
+                        detected_letters.append(values[best_row])
 
             # Validate detected pattern
             if len(detected_letters) >= 3:
@@ -1319,8 +1325,10 @@ class YOLOOMRProcessor:
                 corridor_passed = [(r, v, cm) for r, v, cf, cm in candidates_with_corridor if cf]
 
                 if corridor_passed:
-                    # Use the darkest bubble that passes corridor check
-                    corridor_passed.sort(key=lambda x: x[1])  # Sort by darkness
+                    # Use the FIRST bubble (lowest row number) that passes corridor check
+                    # This fixes the issue where multiple bubbles are filled (e.g., both R and U)
+                    # and we were picking the darkest instead of the first one
+                    corridor_passed.sort(key=lambda x: x[0])  # Sort by row number (first = earliest letter)
                     darkest_row, darkest_val, _ = corridor_passed[0]
                     corridor_validated = True
                 else:
@@ -1592,7 +1600,9 @@ class YOLOOMRProcessor:
                     filled_bubbles.append((row, conf))
 
             if filled_bubbles:
-                best_row, _ = max(filled_bubbles, key=lambda x: x[1])
+                # Pick the FIRST filled bubble (lowest row number) instead of highest confidence
+                # This ensures we get the correct letter when multiple bubbles are filled
+                best_row, _ = min(filled_bubbles, key=lambda x: x[0])  # Sort by row number
                 if best_row < len(values):
                     result_chars.append(values[best_row])
                     consecutive_empty = 0
@@ -1655,8 +1665,9 @@ class YOLOOMRProcessor:
                     filled_bubbles.append((row, conf))
 
             if filled_bubbles:
-                # Pick the one with highest confidence
-                best_row, _ = max(filled_bubbles, key=lambda x: x[1])
+                # Pick the FIRST filled bubble (lowest row number) instead of highest confidence
+                # This ensures we get the correct letter when multiple bubbles are filled
+                best_row, _ = min(filled_bubbles, key=lambda x: x[0])  # Sort by row number
                 if best_row < len(values):
                     result_chars.append(values[best_row])
             elif preserve_spaces:
@@ -1708,14 +1719,11 @@ class YOLOOMRProcessor:
                     result_chars.append(' ')
                 continue
 
-            # Sort bubbles by darkness (darkest first)
+            # Calculate statistics
             all_vals = [v for _, v in bubble_values]
             median_val = np.median(all_vals)
             sorted_bubbles = sorted(bubble_values, key=lambda x: x[1])
-            darkest_row, darkest_val = sorted_bubbles[0]
-
-            # Use gap to median (more robust than gap to 2nd darkest which can be affected by bleeding)
-            gap_to_median = median_val - darkest_val
+            darkest_val = sorted_bubbles[0][1]
 
             # Detect scan artifacts: if ALL bubbles are similarly dark (low variance),
             # this column might be hitting a dark edge/artifact, not actual bubbles
@@ -1727,43 +1735,49 @@ class YOLOOMRProcessor:
                     result_chars.append(' ')
                 continue
 
-            # Adaptive detection: bubble is filled if darkest is significantly darker than median
-            # Uses gap_to_median which is more robust than gap_to_2nd (handles bleeding)
-            # Thresholds tuned for various scan qualities (some have very light fills ~220+)
-            is_filled = (
-                (gap_to_median > 40 and darkest_val < 235)   # Clear filled bubble
-                or (gap_to_median > 20 and darkest_val < 230)  # Good gap, very light fill
-                or (gap_to_median > 12 and darkest_val < 220)  # Medium gap, light fill
-                or (gap_to_median > 8 and darkest_val < 200)   # Small gap, darker fill
-            )
+            # Find ALL bubbles that qualify as "filled" based on threshold criteria
+            # Then pick the FIRST one (lowest row number) instead of the darkest
+            filled_candidates = []
+            for row, darkness in bubble_values:
+                bubble_gap_to_median = median_val - darkness
 
-            # For single-column fields (section, class), be more lenient
-            # These fields should always detect if there's ANY distinguishable filled bubble
-            if not is_filled and field_name in ('section', 'class'):
-                second_val = sorted_bubbles[1][1] if len(sorted_bubbles) > 1 else median_val
-                gap = second_val - darkest_val
-                # Fallback 1: Even smaller gap but still darker than others
-                if gap_to_median > 5 and darkest_val < 210:
-                    is_filled = True
-                # Fallback 2: Very dark bubble even with poor gap
-                elif darkest_val < 150 and gap > 3:
-                    is_filled = True
-                # Fallback 3: Pick darkest if it's reasonably distinct from the rest
-                elif gap > 5 and darkest_val < median_val * 0.85:
-                    is_filled = True
+                is_bubble_filled = False
 
-            # For name field, also be more lenient to catch lightly filled bubbles
-            if not is_filled and field_name == 'name':
-                # Fallback: Lower gap threshold for light fills (gap_to_median 15-20)
-                if gap_to_median > 15 and darkest_val < 228:
-                    is_filled = True
-                # Fallback 2: Even lighter fills with reasonable gap
-                elif gap_to_median > 10 and darkest_val < 225:
-                    is_filled = True
+                # Primary detection criteria
+                if (bubble_gap_to_median > 40 and darkness < 235):   # Clear filled
+                    is_bubble_filled = True
+                elif (bubble_gap_to_median > 20 and darkness < 230):  # Good gap, light fill
+                    is_bubble_filled = True
+                elif (bubble_gap_to_median > 12 and darkness < 220):  # Medium gap
+                    is_bubble_filled = True
+                elif (bubble_gap_to_median > 8 and darkness < 200):   # Small gap, darker
+                    is_bubble_filled = True
 
-            if is_filled:
-                if darkest_row < len(values):
-                    result_chars.append(values[darkest_row])
+                # For single-column fields, be more lenient
+                if not is_bubble_filled and field_name in ('section', 'class'):
+                    if bubble_gap_to_median > 5 and darkness < 210:
+                        is_bubble_filled = True
+                    elif darkness < 150:
+                        is_bubble_filled = True
+                    elif bubble_gap_to_median > 3 and darkness < median_val * 0.85:
+                        is_bubble_filled = True
+
+                # For name field, more lenient for light fills
+                if not is_bubble_filled and field_name == 'name':
+                    if bubble_gap_to_median > 15 and darkness < 228:
+                        is_bubble_filled = True
+                    elif bubble_gap_to_median > 10 and darkness < 225:
+                        is_bubble_filled = True
+
+                if is_bubble_filled:
+                    filled_candidates.append((row, darkness))
+
+            # Pick the FIRST filled bubble (lowest row number)
+            if filled_candidates:
+                filled_candidates.sort(key=lambda x: x[0])  # Sort by row number
+                best_row = filled_candidates[0][0]
+                if best_row < len(values):
+                    result_chars.append(values[best_row])
             elif preserve_spaces:
                 # No bubble filled in this column = space between words
                 result_chars.append(' ')
