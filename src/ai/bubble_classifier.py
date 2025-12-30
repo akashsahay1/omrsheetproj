@@ -331,13 +331,21 @@ class BubbleClassifierTrainer:
         return results
 
     def save_model(self, path: str):
-        """Save model weights."""
-        torch.save(self.model.state_dict(), path)
+        """Save model weights in checkpoint format."""
+        checkpoint = {
+            'model_state_dict': self.model.state_dict(),
+        }
+        torch.save(checkpoint, path)
         print(f"Model saved to {path}")
 
     def load_model(self, path: str):
-        """Load model weights."""
-        self.model.load_state_dict(torch.load(path, map_location=self.device))
+        """Load model weights (handles both checkpoint and direct state_dict formats)."""
+        checkpoint = torch.load(path, map_location=self.device)
+        # Handle both formats: checkpoint dict or direct state_dict
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            self.model.load_state_dict(checkpoint)
         self.model.eval()
         print(f"Model loaded from {path}")
 
@@ -369,5 +377,84 @@ def train_bubble_classifier():
     return trainer
 
 
+def train_expanded_classifier(max_samples: int = 500000):
+    """
+    Train bubble classifier on the expanded 5M+ bubble dataset.
+
+    Uses class balancing to handle the 97% empty / 3% filled imbalance.
+
+    Args:
+        max_samples: Maximum samples per class for balanced training
+    """
+    import random
+
+    project_dir = Path(__file__).parent.parent.parent
+    data_dir = project_dir / 'bubble_training_data_v2'
+    model_path = project_dir / 'models' / 'bubble_classifier_v2.pt'
+
+    print("Loading pre-extracted bubble training data...")
+    bubbles = np.load(data_dir / 'bubbles.npy')
+    labels = np.load(data_dir / 'labels.npy')
+
+    print(f"Loaded {len(bubbles):,} bubbles")
+    print(f"  Filled: {sum(labels):,} ({100*sum(labels)/len(labels):.1f}%)")
+    print(f"  Empty: {len(labels)-sum(labels):,} ({100*(len(labels)-sum(labels))/len(labels):.1f}%)")
+
+    # Class balancing: undersample majority class
+    filled_indices = np.where(labels == 1)[0]
+    empty_indices = np.where(labels == 0)[0]
+
+    # Take all filled samples (minority class) up to max_samples
+    n_filled = min(len(filled_indices), max_samples)
+    selected_filled = np.random.choice(filled_indices, n_filled, replace=False)
+
+    # Match with equal number of empty samples
+    n_empty = min(len(empty_indices), n_filled)  # Same as filled for balance
+    selected_empty = np.random.choice(empty_indices, n_empty, replace=False)
+
+    # Combine and shuffle
+    selected_indices = np.concatenate([selected_filled, selected_empty])
+    np.random.shuffle(selected_indices)
+
+    balanced_bubbles = bubbles[selected_indices]
+    balanced_labels = labels[selected_indices]
+
+    print(f"\nBalanced training set: {len(balanced_bubbles):,} samples")
+    print(f"  Filled: {sum(balanced_labels):,}")
+    print(f"  Empty: {len(balanced_labels)-sum(balanced_labels):,}")
+
+    # Initialize trainer with MPS support
+    trainer = BubbleClassifierTrainer()
+
+    # Check for MPS (Apple Silicon)
+    if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        trainer.device = torch.device('mps')
+        trainer.model.to(trainer.device)
+        print(f"\nUsing MPS (Apple Silicon) for training")
+    else:
+        print(f"\nUsing device: {trainer.device}")
+
+    # Train with larger batch size for faster training
+    print("\nTraining on expanded dataset...")
+    trainer.train(
+        bubbles=list(balanced_bubbles),
+        labels=list(balanced_labels),
+        epochs=50,
+        batch_size=256,
+        lr=0.001
+    )
+
+    # Save model
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    trainer.save_model(str(model_path))
+
+    print(f"\nModel saved to {model_path}")
+    return trainer
+
+
 if __name__ == "__main__":
-    train_bubble_classifier()
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == '--expanded':
+        train_expanded_classifier()
+    else:
+        train_bubble_classifier()

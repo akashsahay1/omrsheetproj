@@ -251,13 +251,24 @@ class YOLOOMRProcessor:
         if reference_image_path and Path(reference_image_path).exists():
             self.reference_image = cv2.imread(reference_image_path)
 
-        # Load ML bubble classifier if available
+        # Load ML bubble classifier (binary filled/empty classification)
+        # Prefer v2 model trained on expanded dataset
+        if bubble_classifier_path is None:
+            bubble_default_paths = [
+                Path(__file__).parent.parent.parent / "models" / "bubble_classifier_v2.pt",
+                Path(__file__).parent.parent.parent / "models" / "name_bubble_classifier.pt",
+                Path("models/bubble_classifier_v2.pt"),
+            ]
+            for p in bubble_default_paths:
+                if p.exists():
+                    bubble_classifier_path = str(p)
+                    break
         if bubble_classifier_path and Path(bubble_classifier_path).exists():
             self._load_bubble_classifier(bubble_classifier_path)
 
         # Load ML answer classifier - try default path if not specified
+        # Note: answer_classifier uses AnswerBubbleCNN (5-class), not BubbleClassifier (binary)
         if answer_classifier_path is None:
-            # Try to find the default model path
             default_paths = [
                 Path(__file__).parent.parent.parent / "models" / "bubble_classifier.pt",
                 Path("models/bubble_classifier.pt"),
@@ -384,8 +395,8 @@ class YOLOOMRProcessor:
                 # Use direct grid sampling (more reliable)
                 result = self._process_with_grid_sampling(aligned)
 
-            # Use OCR fallback if name detection is poor
-            result = self._apply_ocr_fallback(result, image_path)
+            # Always verify name with OCR and pick best result
+            result = self._verify_name_with_ocr(result, image_path)
 
             return result
 
@@ -396,44 +407,116 @@ class YOLOOMRProcessor:
                 error_message=f"Processing error: {str(e)}\n{traceback.format_exc()}"
             )
 
-    def _apply_ocr_fallback(self, result: OMRResult, image_path: str) -> OMRResult:
-        """Apply OCR fallback if bubble detection produced poor results."""
+    def _verify_name_with_ocr(self, result: OMRResult, image_path: str) -> OMRResult:
+        """Always run OCR verification and compare with bubble detection result."""
         if self.ocr_extractor is None:
             return result
 
         bubble_name = result.name or ""
-        has_space = ' ' in bubble_name
-        is_short = len(bubble_name.replace(' ', '')) <= 5
+        bubble_conf = result.field_confidences.get('name', 0.0)
 
-        # Check if name looks suspicious (likely detection failure)
-        looks_suspicious = self._is_suspicious_name(bubble_name)
+        try:
+            # ALWAYS run OCR extraction
+            ocr_name, ocr_conf = self.ocr_extractor.extract_name(image_path)
+            ocr_clean = self._clean_ocr_name(ocr_name) if ocr_name else ""
 
-        # Use OCR fallback if:
-        # 1. Name is very short (≤5 chars)
-        # 2. Name has no space but has characters
-        # 3. Name looks suspicious (unusual patterns)
-        if is_short or (not has_space and len(bubble_name) > 0) or looks_suspicious:
-            try:
-                ocr_name, ocr_conf = self.ocr_extractor.extract_name(image_path)
+            # Compare and pick best result
+            final_name, source = self._compare_name_results(
+                bubble_name,
+                ocr_clean,
+                bubble_conf,
+                ocr_conf
+            )
 
-                if ocr_name:
-                    ocr_clean = self._clean_ocr_name(ocr_name)
+            result.name = final_name
+            result.ocr_used = (source == 'ocr')
+            result.field_confidences['name_source'] = source
+            result.field_confidences['ocr_confidence'] = ocr_conf
+            result.field_confidences['bubble_name'] = bubble_name
+            result.field_confidences['ocr_name'] = ocr_clean
 
-                    # Use OCR if it gives a better result
-                    ocr_looks_better = (
-                        len(ocr_clean) > len(bubble_name) and
-                        ' ' in ocr_clean and
-                        not self._is_suspicious_name(ocr_clean)
-                    )
-
-                    if ocr_looks_better or (looks_suspicious and ' ' in ocr_clean):
-                        result.name = ocr_clean
-                        result.ocr_used = True
-
-            except Exception as e:
-                pass  # OCR failed, keep bubble result
+        except Exception as e:
+            # OCR failed, keep bubble result if valid
+            if not bubble_name:
+                result.error_message = f"OCR fallback failed: {e}"
 
         return result
+
+    def _compare_name_results(
+        self,
+        bubble_name: str,
+        ocr_name: str,
+        bubble_conf: float,
+        ocr_conf: float
+    ) -> tuple:
+        """
+        Compare bubble detection and OCR results to pick the best name.
+
+        Decision logic:
+        1. Both blank -> return blank with low confidence
+        2. One blank -> return non-blank result
+        3. Both have content -> compare quality metrics
+        """
+        from typing import Tuple
+
+        bubble_score = self._score_name_quality(bubble_name, bubble_conf)
+        ocr_score = self._score_name_quality(ocr_name, ocr_conf)
+
+        # Case 1: Both blank
+        if not bubble_name and not ocr_name:
+            return ("", "none")
+
+        # Case 2: Only bubble has content
+        if bubble_name and not ocr_name:
+            return (bubble_name, "bubble")
+
+        # Case 3: Only OCR has content
+        if not bubble_name and ocr_name:
+            return (ocr_name, "ocr")
+
+        # Case 4: Both have content - use quality scoring
+        # Strong bubble result (high score, valid pattern)
+        if bubble_score > 0.7 and not self._is_suspicious_name(bubble_name):
+            # Only prefer OCR if it's significantly better
+            if ocr_score > bubble_score + 0.2 and ' ' in ocr_name:
+                return (ocr_name, "ocr")
+            return (bubble_name, "bubble")
+
+        # Weak bubble result - prefer OCR if reasonable
+        if ocr_score > 0.4 and ' ' in ocr_name and not self._is_suspicious_name(ocr_name):
+            return (ocr_name, "ocr")
+
+        # Default to bubble if both are weak but bubble has content
+        return (bubble_name if bubble_name else ocr_name,
+                "bubble" if bubble_name else "ocr")
+
+    def _score_name_quality(self, name: str, confidence: float) -> float:
+        """Score a name result based on quality indicators."""
+        if not name:
+            return 0.0
+
+        score = confidence * 0.4  # Base from detection confidence
+
+        # Length bonus (reasonable Indian names: 8-25 chars)
+        name_len = len(name.replace(' ', ''))
+        if 8 <= name_len <= 25:
+            score += 0.2
+        elif 5 <= name_len < 8:
+            score += 0.1
+
+        # Space bonus (most Indian names have 2+ words)
+        if ' ' in name:
+            word_count = len(name.split())
+            if word_count >= 2:
+                score += 0.2
+            if word_count >= 3:
+                score += 0.1
+
+        # Penalty for suspicious patterns
+        if self._is_suspicious_name(name):
+            score -= 0.3
+
+        return min(1.0, max(0.0, score))
 
     def _is_suspicious_name(self, name: str) -> bool:
         """Check if a name looks suspicious (likely detection error)."""
