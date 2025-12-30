@@ -73,19 +73,24 @@ def annotate_image(processor, image_path: Path, copy_to_golden: bool = True):
     print("\nDetected values:")
     print(f"  Name:        {result.name}")
     print(f"  Roll Number: {result.roll_number}")
-    print(f"  Class:       {result.student_class}")
+    print(f"  Class:       {getattr(result, 'class_', '') or ''}")
     print(f"  Section:     {result.section}")
     print(f"  School Code: {result.school_code}")
 
-    # Format answers
-    chayan_answers = result.chayan_answers if hasattr(result, 'chayan_answers') else []
-    khoj_answers = result.khoj_answers if hasattr(result, 'khoj_answers') else []
+    # Format answers - check for different attribute names
+    chayan_answers = []
+    khoj_answers = []
 
-    if not chayan_answers and hasattr(result, 'answers'):
-        # Split answers into Chayan (1-10) and Khoj (11-20)
-        all_answers = result.answers or []
-        chayan_answers = all_answers[:10] if len(all_answers) >= 10 else all_answers
-        khoj_answers = all_answers[10:20] if len(all_answers) >= 20 else []
+    if hasattr(result, 'chayan_answers') and result.chayan_answers:
+        chayan_answers = result.chayan_answers
+    if hasattr(result, 'khoj_answers') and result.khoj_answers:
+        khoj_answers = result.khoj_answers
+
+    # Fallback: try to get from answers dict
+    if not chayan_answers and hasattr(result, 'answers') and result.answers:
+        answers_dict = result.answers
+        chayan_answers = [answers_dict.get(i, '-') for i in range(1, 11)]
+        khoj_answers = [answers_dict.get(i, '-') for i in range(11, 21)]
 
     print(f"  Chayan (Q1-10): {' '.join(chayan_answers) if chayan_answers else 'N/A'}")
     print(f"  Khoj (Q11-20):  {' '.join(khoj_answers) if khoj_answers else 'N/A'}")
@@ -105,7 +110,7 @@ def annotate_image(processor, image_path: Path, copy_to_golden: bool = True):
         "filename": image_path.name,
         "name": result.name or "",
         "roll_number": result.roll_number or "",
-        "class": result.student_class or "",
+        "class": getattr(result, 'class_', '') or "",
         "section": result.section or "",
         "school_code": result.school_code or "",
         "chayan_answers": chayan_answers,
