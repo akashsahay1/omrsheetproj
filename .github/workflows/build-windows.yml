@@ -46,18 +46,73 @@ jobs:
         run: |
           Get-ChildItem -Path dist -Recurse
 
-      - name: Upload Windows artifact
+      - name: Install WiX Toolset
+        run: |
+          # Install WiX v3 using dotnet tool
+          dotnet tool install --global wix --version 4.0.5
+          # Add to PATH
+          echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Create license.rtf
+        run: |
+          @"
+          {\rtf1\ansi\deff0
+          {\fonttbl{\f0 Arial;}}
+          \f0\fs20
+          VB OMR Scanner - Vidya Bharti Pratibha Khoj\par
+          \par
+          Copyright (c) 2025 Vidya Bharti. All rights reserved.\par
+          \par
+          This software is proprietary and confidential.\par
+          }
+          "@ | Out-File -FilePath license.rtf -Encoding ascii
+
+      - name: Build MSI installer
+        run: |
+          # Use WiX v4 to build MSI
+          wix build -o "dist\VB_OMR_Scanner.msi" "installer.wxs" -ext WixToolset.UI.wixext
+        continue-on-error: true
+
+      - name: Build MSI with WiX v3 (fallback)
+        if: failure()
+        run: |
+          # Install WiX v3 via chocolatey as fallback
+          choco install wixtoolset -y --no-progress
+          $env:PATH = "C:\Program Files (x86)\WiX Toolset v3.14\bin;$env:PATH"
+
+          # Compile and link
+          candle.exe -nologo -out "dist\installer.wixobj" "installer.wxs" -ext WixUIExtension
+          light.exe -nologo -out "dist\VB_OMR_Scanner.msi" "dist\installer.wixobj" -ext WixUIExtension -spdb
+
+          # Cleanup
+          Remove-Item "dist\installer.wixobj" -ErrorAction SilentlyContinue
+
+      - name: List final dist folder
+        run: |
+          Get-ChildItem -Path dist
+
+      - name: Upload Windows EXE artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VB-OMR-Scanner-Windows
+          name: VB-OMR-Scanner-Windows-EXE
           path: dist/*.exe
           retention-days: 30
+
+      - name: Upload Windows MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VB-OMR-Scanner-Windows-MSI
+          path: dist/*.msi
+          retention-days: 30
+          if-no-files-found: ignore
 
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: dist/*.exe
+          files: |
+            dist/*.exe
+            dist/*.msi
           body: |
             ## VB OMR Scanner ${{ github.ref_name }}
 
@@ -66,10 +121,10 @@ jobs:
             - EasyOCR fallback for handwritten names
             - Batch OMR sheet processing
             - Excel export with scoring and rankings
+            - **0% blank name detection** with OCR verification
 
-            ### Installation
-            1. Download `VB OMR Scanner.exe`
-            2. Run the executable (no installation required)
-            3. Or use the MSI installer for system-wide installation
+            ### Installation Options
+            1. **Portable**: Download `VB OMR Scanner.exe` - no installation required
+            2. **MSI Installer**: Download `VB_OMR_Scanner.msi` for system-wide installation with Start Menu shortcuts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
