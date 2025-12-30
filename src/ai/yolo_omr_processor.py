@@ -1044,6 +1044,12 @@ class YOLOOMRProcessor:
         # Sort by score descending
         offset_scores.sort(key=lambda x: x[1], reverse=True)
 
+        # Ensure offset 0 is tested (important baseline)
+        zero_in_list = any(o == 0 for o, s in offset_scores[:10])
+        if not zero_in_list:
+            # Add offset 0 with a baseline score
+            offset_scores.append((0, 50))
+
         # Try top candidates and validate detected pattern
         values = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
         vowels = set('AEIOU')
@@ -1051,7 +1057,11 @@ class YOLOOMRProcessor:
         garbage_patterns = {'QA', 'QS', 'QU', 'QO', 'QE', 'QI', 'LQ', 'ZQ', 'XQ',
                            'JQ', 'ZZ', 'QQ', 'XX', 'JJ', 'ZJ', 'JZ', 'XZ', 'ZX'}
 
-        for y_offset, score in offset_scores[:5]:  # Try top 5 candidates
+        # Collect valid candidates with priority_first, then prefer offset closest to 0
+        priority_candidates = []  # (y_offset, score, detected_letters)
+        other_valid_candidates = []  # Valid but without priority first letter
+
+        for y_offset, score in offset_scores[:10]:  # Try top 10 candidates
             # Quick detection at this offset
             detected_letters = []
             for col in range(8):  # Check first 8 columns
@@ -1080,16 +1090,39 @@ class YOLOOMRProcessor:
                         best_row = filled_candidates[0][0]
                         detected_letters.append(values[best_row])
 
-            # Validate detected pattern
-            if len(detected_letters) >= 3:
+            # Validate detected pattern (need at least 2 letters for validation)
+            if len(detected_letters) >= 2:
                 detected_str = ''.join(detected_letters)
                 # Check for garbage patterns
                 has_garbage = any(p in detected_str for p in garbage_patterns)
                 # Check for at least one vowel in first 6 letters
                 has_vowel = any(c in vowels for c in detected_str[:6])
+                # Reject offsets where first letter is unlikely (Q, W, X, Z, etc.)
+                unlikely_first = set('QWXZFOU')  # Very rare as first letters
+                first_letter_unlikely = detected_letters[0] in unlikely_first if detected_letters else True
+                # Check for repeated same letter in first 4 positions (suspicious pattern)
+                first_4 = detected_letters[:4]
+                has_repeat = len(first_4) > len(set(first_4)) + 1  # Allow 1 repeat max
+                # Very common starting letters get priority (A is most common for Indian names)
+                priority_first = detected_letters[0] in 'ABCDKMNPRS' if detected_letters else False
 
-                if not has_garbage and has_vowel:
-                    return y_offset  # Valid pattern found
+                if not has_garbage and has_vowel and not first_letter_unlikely and not has_repeat:
+                    if priority_first:
+                        priority_candidates.append((y_offset, score, detected_letters))
+                    else:
+                        other_valid_candidates.append((y_offset, score, detected_letters))
+
+        # From priority candidates, prefer the one closest to Y=0 for stability
+        # This prevents wrong alignment when multiple offsets detect valid patterns
+        if priority_candidates:
+            # Sort by absolute offset value (prefer closer to 0)
+            priority_candidates.sort(key=lambda x: abs(x[0]))
+            return priority_candidates[0][0]
+
+        # Second choice: valid candidates without priority first letter, prefer closest to 0
+        if other_valid_candidates:
+            other_valid_candidates.sort(key=lambda x: abs(x[0]))
+            return other_valid_candidates[0][0]
 
         # Fallback to highest scoring offset
         return offset_scores[0][0] if offset_scores else 0
