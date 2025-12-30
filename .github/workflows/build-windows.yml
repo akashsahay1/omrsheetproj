@@ -46,11 +46,18 @@ jobs:
         run: |
           Get-ChildItem -Path dist -Recurse
 
-      - name: Install WiX Toolset v3
+      - name: Setup WiX Toolset
         run: |
-          choco install wixtoolset --version=3.14.1 -y --no-progress
-          # Add WiX to PATH for subsequent steps
-          echo "C:\Program Files (x86)\WiX Toolset v3.14\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # WiX is pre-installed on GitHub runners, just ensure it's in PATH
+          $wixPath = "C:\Program Files (x86)\WiX Toolset v3.14\bin"
+          if (Test-Path $wixPath) {
+            echo $wixPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            Write-Host "Found WiX at: $wixPath"
+          } else {
+            # Fallback: install if not present
+            choco install wixtoolset -y --no-progress
+            echo "C:\Program Files (x86)\WiX Toolset v3.14\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
 
       - name: Create license.rtf
         run: |
