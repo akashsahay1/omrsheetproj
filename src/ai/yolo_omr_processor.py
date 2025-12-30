@@ -1815,26 +1815,26 @@ class YOLOOMRProcessor:
         # Use batch-specific answer configuration
         answer_blocks = getattr(self, '_current_answer_blocks', self.ANSWER_BLOCKS)
         row_positions = getattr(self, '_current_answer_row_positions', self.ANSWER_ROW_POSITIONS)
+        bw, bh = self.ANSWER_BUBBLE_SIZE
 
         for block in answer_blocks:
             origin_x = block['origin'][0]
             questions = list(block['questions'])
 
-            for q_idx, q_num in enumerate(questions):
-                y_base = row_positions[q_idx]
-                bw, bh = self.ANSWER_BUBBLE_SIZE
+            # IMPORTANT: Find ONE consistent Y offset for the entire block
+            # This prevents per-question drift to wrong rows (like label rows or adjacent questions)
+            best_block_y_offset = 0
+            best_block_x_offset = 0
+            best_block_total_gap = 0
 
-                # Try multiple y offsets to handle alignment variance across scans
-                # This improves detection when bubble positions vary by a few pixels
-                best_gap = 0
-                best_option_values = []
-                best_darkest_opt = 0
-                best_darkest_val = 255
+            for y_offset in range(-30, 125, 10):
+                for x_offset in [-20, -10, 0, 10, 20]:
+                    total_gap = 0
+                    valid_questions = 0
 
-                # Search both y and x offsets to handle alignment variance
-                # x: [-20, 10] for progressive block drift, y: [-15, 40] for row variance
-                for y_offset in [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30, 35, 40]:
-                    for x_offset in [-20, -15, -10, -5, 0, 5, 10]:
+                    # Calculate total gap across all questions at this offset
+                    for q_idx in range(len(questions)):
+                        y_base = row_positions[q_idx]
                         y = y_base + y_offset
                         if y < 0 or y >= gray.shape[0] - bh:
                             continue
@@ -1845,29 +1845,41 @@ class YOLOOMRProcessor:
                             if 0 <= x < gray.shape[1] - bw:
                                 bubble = gray[y:y+bh, x:x+bw]
                                 darkness = np.mean(bubble)
-                                option_values.append((opt_idx, darkness))
+                                option_values.append(darkness)
 
                         if len(option_values) == 4:
-                            sorted_opts = sorted(option_values, key=lambda x: x[1])
-                            gap = sorted_opts[1][1] - sorted_opts[0][1]
-                            if gap > best_gap:
-                                best_gap = gap
-                                best_option_values = option_values
-                                best_darkest_opt = sorted_opts[0][0]
-                                best_darkest_val = sorted_opts[0][1]
+                            sorted_vals = sorted(option_values)
+                            gap = sorted_vals[1] - sorted_vals[0]
+                            total_gap += gap
+                            valid_questions += 1
 
-                option_values = best_option_values
-                darkest_opt = best_darkest_opt
-                darkest_val = best_darkest_val
-                gap = best_gap
+                    if valid_questions == len(questions) and total_gap > best_block_total_gap:
+                        best_block_total_gap = total_gap
+                        best_block_y_offset = y_offset
+                        best_block_x_offset = x_offset
 
-                if not option_values:
+            # Now detect answers using the consistent block offset
+            for q_idx, q_num in enumerate(questions):
+                y_base = row_positions[q_idx]
+                y = y_base + best_block_y_offset
+
+                option_values = []
+                for opt_idx in range(4):
+                    x = origin_x + best_block_x_offset + opt_idx * self.ANSWER_OPTION_GAP
+                    if 0 <= x < gray.shape[1] - bw and 0 <= y < gray.shape[0] - bh:
+                        bubble = gray[y:y+bh, x:x+bw]
+                        darkness = np.mean(bubble)
+                        option_values.append((opt_idx, darkness))
+
+                if not option_values or len(option_values) != 4:
                     answers[q_num] = ''
                     question_confidences.append(0.0)
                     continue
 
                 sorted_opts = sorted(option_values, key=lambda x: x[1])
+                darkest_opt, darkest_val = sorted_opts[0]
                 second_val = sorted_opts[1][1] if len(sorted_opts) > 1 else 255
+                gap = second_val - darkest_val
 
                 # Calculate confidence based on gap
                 if gap > 50:
@@ -1940,16 +1952,66 @@ class YOLOOMRProcessor:
             origin_x = block['origin'][0]
             questions = list(block['questions'])
 
+            # IMPORTANT: Find ONE consistent Y offset for the entire block
+            # This prevents per-question drift to wrong rows (like label rows)
+            best_block_offset = 0
+            best_block_confidence = 0.0
+
+            for y_offset in range(-30, 125, 15):
+                for x_offset in [-20, -10, 0, 10, 20]:
+                    total_confidence = 0.0
+                    valid_questions = 0
+
+                    # Calculate total confidence across all questions at this offset
+                    for q_idx in range(len(questions)):
+                        y_base = row_positions[q_idx]
+                        y = y_base + y_offset
+                        if y < 0 or y >= gray.shape[0] - bh:
+                            continue
+
+                        bubbles = []
+                        valid = True
+                        for opt_idx in range(4):
+                            x = origin_x + x_offset + opt_idx * self.ANSWER_OPTION_GAP
+                            if 0 <= x < gray.shape[1] - bw:
+                                bubble = gray[y:y+bh, x:x+bw]
+                                bubble = cv2.resize(bubble, (28, 28))
+                                bubbles.append(bubble)
+                            else:
+                                valid = False
+                                break
+
+                        if not valid or len(bubbles) != 4:
+                            continue
+
+                        batch = np.stack([b.astype(np.float32) / 255.0 for b in bubbles])
+                        batch = batch[:, np.newaxis, :, :]
+                        batch_tensor = torch.tensor(batch).to(self.answer_classifier_device)
+
+                        with torch.no_grad():
+                            outputs = self.answer_classifier(batch_tensor)
+                            probs = torch.softmax(outputs, dim=1)
+                            filled_probs = 1 - probs[:, 0]
+
+                        max_prob = filled_probs.max().item()
+                        total_confidence += max_prob
+                        valid_questions += 1
+
+                    if valid_questions == len(questions) and total_confidence > best_block_confidence:
+                        best_block_confidence = total_confidence
+                        best_block_offset = y_offset
+
+            # Now detect answers using the consistent block offset
             for q_idx, q_num in enumerate(questions):
                 y_base = row_positions[q_idx]
+                y = y_base + best_block_offset
 
-                # Extract all 4 option bubbles
                 bubbles = []
                 valid = True
                 for opt_idx in range(4):
                     x = origin_x + opt_idx * self.ANSWER_OPTION_GAP
-                    if 0 <= y_base < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw:
-                        bubble = gray[y_base:y_base+bh, x:x+bw]
+                    if 0 <= x < gray.shape[1] - bw and 0 <= y < gray.shape[0] - bh:
+                        bubble = gray[y:y+bh, x:x+bw]
                         bubble = cv2.resize(bubble, (28, 28))
                         bubbles.append(bubble)
                     else:
@@ -1960,22 +2022,18 @@ class YOLOOMRProcessor:
                     answers[q_num] = ''
                     continue
 
-                # Run ML classification
                 batch = np.stack([b.astype(np.float32) / 255.0 for b in bubbles])
-                batch = batch[:, np.newaxis, :, :]  # Add channel dim
+                batch = batch[:, np.newaxis, :, :]
                 batch_tensor = torch.tensor(batch).to(self.answer_classifier_device)
 
                 with torch.no_grad():
                     outputs = self.answer_classifier(batch_tensor)
                     probs = torch.softmax(outputs, dim=1)
-                    # Filled probability = 1 - empty probability
                     filled_probs = 1 - probs[:, 0]
 
-                # Find option with highest filled probability
                 max_filled_prob, max_idx = filled_probs.max(dim=0)
 
                 if max_filled_prob > 0.5:
-                    # Check for multi-marked
                     multi_marked = []
                     for opt_idx in range(4):
                         if filled_probs[opt_idx] > 0.5:
@@ -2001,20 +2059,53 @@ class YOLOOMRProcessor:
         for block in answer_blocks:
             origin_x = block['origin'][0]
             questions = list(block['questions'])
+            bw, bh = self.ANSWER_BUBBLE_SIZE
 
+            # IMPORTANT: Find ONE consistent Y offset for the entire block
+            # This prevents per-question drift to wrong rows (like label rows)
+            best_block_offset = 0
+            best_block_total_gap = 0
+
+            for y_offset in range(-30, 125, 10):
+                for x_offset in [-20, -10, 0, 10, 20]:
+                    total_gap = 0
+                    valid_questions = 0
+
+                    # Calculate total gap across all questions at this offset
+                    for q_idx in range(len(questions)):
+                        y_base = row_positions[q_idx]
+                        y = y_base + y_offset
+                        if y < 0 or y >= gray.shape[0] - bh:
+                            continue
+
+                        option_values = []
+                        for opt_idx in range(4):
+                            x = origin_x + x_offset + opt_idx * self.ANSWER_OPTION_GAP
+                            if 0 <= x < gray.shape[1] - bw:
+                                bubble = gray[y:y+bh, x:x+bw]
+                                darkness = np.mean(bubble)
+                                option_values.append(darkness)
+
+                        if len(option_values) == 4:
+                            sorted_vals = sorted(option_values)
+                            gap = sorted_vals[1] - sorted_vals[0]
+                            total_gap += gap
+                            valid_questions += 1
+
+                    if valid_questions == len(questions) and total_gap > best_block_total_gap:
+                        best_block_total_gap = total_gap
+                        best_block_offset = y_offset
+
+            # Now detect answers using the consistent block offset
             for q_idx, q_num in enumerate(questions):
-                # Use calibrated row positions (non-uniform spacing)
                 y_base = row_positions[q_idx]
+                y = y_base + best_block_offset
 
-                # Get darkness values for all options (A, B, C, D)
                 option_values = []
                 for opt_idx in range(4):
-                    # Options go horizontally - x changes for A,B,C,D
                     x = origin_x + opt_idx * self.ANSWER_OPTION_GAP
-
-                    bw, bh = self.ANSWER_BUBBLE_SIZE
-                    if 0 <= y_base < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw:
-                        bubble = gray[y_base:y_base+bh, x:x+bw]
+                    if 0 <= x < gray.shape[1] - bw and 0 <= y < gray.shape[0] - bh:
+                        bubble = gray[y:y+bh, x:x+bw]
                         darkness = np.mean(bubble)
                         option_values.append((opt_idx, darkness))
 
