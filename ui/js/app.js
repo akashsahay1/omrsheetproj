@@ -16,7 +16,9 @@ const AppState = {
     examLevel: 'Prarambhik',
     examType: 'Chayan',
     sortColumn: 'rank',
-    sortDirection: 'asc'
+    sortDirection: 'asc',
+    engineReady: false,
+    engineStatusInterval: null
 };
 
 // Initialize application when DOM is ready
@@ -29,6 +31,8 @@ window.addEventListener('pywebviewready', () => {
     console.log('PyWebView API ready');
     loadAnswerKeyStatus();
     loadSettings();
+    // Start checking engine status
+    startEngineStatusCheck();
 });
 
 /**
@@ -48,6 +52,72 @@ function initApp() {
 
     // Show dashboard
     navigateTo('dashboard');
+}
+
+// ==================== Engine Status ====================
+
+/**
+ * Start checking ML engine initialization status
+ */
+function startEngineStatusCheck() {
+    // Check immediately
+    checkEngineStatus();
+
+    // Then poll every 500ms until ready
+    AppState.engineStatusInterval = setInterval(async () => {
+        const ready = await checkEngineStatus();
+        if (ready) {
+            clearInterval(AppState.engineStatusInterval);
+            AppState.engineStatusInterval = null;
+        }
+    }, 500);
+}
+
+/**
+ * Check ML engine status and update UI
+ * @returns {boolean} True if engine is ready
+ */
+async function checkEngineStatus() {
+    try {
+        const status = await API.getEngineStatus();
+
+        if (status.initialized) {
+            AppState.engineReady = true;
+            updateEngineStatusUI(true, null);
+            return true;
+        } else if (status.error) {
+            AppState.engineReady = false;
+            updateEngineStatusUI(false, status.error);
+            return true; // Stop polling on error
+        } else if (status.initializing) {
+            updateEngineStatusUI(false, 'loading');
+            return false;
+        }
+    } catch (e) {
+        console.log('Engine status check failed:', e);
+    }
+    return false;
+}
+
+/**
+ * Update engine status in UI
+ * @param {boolean} ready - Whether engine is ready
+ * @param {string|null} error - Error message or 'loading' for loading state
+ */
+function updateEngineStatusUI(ready, error) {
+    const statusBox = document.getElementById('engine-status');
+    if (!statusBox) return;
+
+    if (ready) {
+        statusBox.className = 'status-box success';
+        statusBox.innerHTML = 'ML Engine: Ready';
+    } else if (error === 'loading') {
+        statusBox.className = 'status-box warning';
+        statusBox.innerHTML = 'ML Engine: Loading...';
+    } else {
+        statusBox.className = 'status-box error';
+        statusBox.innerHTML = `ML Engine Error: ${error}`;
+    }
 }
 
 /**

@@ -59,6 +59,11 @@ class OMRApp:
 
         raise FileNotFoundError("UI files not found")
 
+    def _on_window_loaded(self):
+        """Called when window is loaded - start background initialization."""
+        logger.info("Window loaded, starting background ML engine initialization")
+        self.api.start_engine_init()
+
     def run(self) -> None:
         """Run the application"""
         try:
@@ -79,6 +84,9 @@ class OMRApp:
 
             # Set window reference in API
             self.api.set_window(self.window)
+
+            # Register window loaded callback to start background init
+            self.window.events.loaded += self._on_window_loaded
 
             # Start webview
             webview.start(

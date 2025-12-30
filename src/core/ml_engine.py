@@ -39,12 +39,19 @@ class MLEngine:
     - ML bubble classifier for improved detection
     - OCR fallback for low-confidence names
     - 98%+ accuracy on name detection
+
+    LAZY LOADING: Models are not loaded until first use to improve startup time.
     """
 
-    def __init__(self):
-        """Initialize the ML engine."""
+    def __init__(self, lazy: bool = True):
+        """Initialize the ML engine.
+
+        Args:
+            lazy: If True, defer model loading until first use (faster startup)
+        """
         self._processor = None
         self._initialized = False
+        self._initializing = False
         self._init_error = None
 
         # Paths
@@ -57,7 +64,9 @@ class MLEngine:
         # ML model paths
         self._bubble_classifier_path = self._models_path / 'bubble_classifier.pt'
 
-        self._initialize()
+        # Only initialize immediately if not lazy loading
+        if not lazy:
+            self._initialize()
 
     def _initialize(self):
         """Initialize the YOLO processor with ML components."""
@@ -104,9 +113,59 @@ class MLEngine:
         """Check if engine is ready."""
         return self._initialized
 
+    def is_initializing(self) -> bool:
+        """Check if engine is currently initializing."""
+        return self._initializing
+
     def get_init_error(self) -> Optional[str]:
         """Get initialization error if any."""
         return self._init_error
+
+    def ensure_initialized(self) -> bool:
+        """Ensure engine is initialized (lazy loading).
+
+        Call this before processing. Will initialize on first call.
+
+        Returns:
+            True if initialized successfully, False otherwise
+        """
+        if self._initialized:
+            return True
+
+        if self._init_error:
+            return False
+
+        if not self._initializing:
+            self._initialize()
+
+        return self._initialized
+
+    def initialize_async(self, callback=None):
+        """Initialize engine in background thread.
+
+        Args:
+            callback: Optional function to call when initialization completes.
+                      Will be called with (success: bool, error: Optional[str])
+        """
+        if self._initialized or self._initializing:
+            if callback:
+                callback(self._initialized, self._init_error)
+            return None
+
+        import threading
+        self._initializing = True
+
+        def init_thread():
+            try:
+                self._initialize()
+            finally:
+                self._initializing = False
+            if callback:
+                callback(self._initialized, self._init_error)
+
+        thread = threading.Thread(target=init_thread, daemon=True)
+        thread.start()
+        return thread
 
     def process_image(self, image_path: str) -> ProcessingResult:
         """
@@ -120,11 +179,13 @@ class MLEngine:
         """
         start_time = time.time()
 
+        # Auto-initialize on first use (lazy loading)
         if not self._initialized:
-            return ProcessingResult(
-                success=False,
-                error_message=f"ML Engine not initialized: {self._init_error}"
-            )
+            if not self.ensure_initialized():
+                return ProcessingResult(
+                    success=False,
+                    error_message=f"ML Engine not initialized: {self._init_error}"
+                )
 
         try:
             # Process with YOLO processor

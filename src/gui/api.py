@@ -37,7 +37,8 @@ class OMRApi:
 
         # Initialize components (underscore prefix for same reason)
         # Use ML-based engine for 98%+ accuracy
-        self._engine = MLEngine()
+        # lazy=True means models won't load until first use (faster startup)
+        self._engine = MLEngine(lazy=True)
         self._batch_processor = BatchProcessor(self._engine)
         self._scorer = Scorer()
         self._exporter = ExcelExporter()
@@ -59,7 +60,38 @@ class OMRApi:
         return {
             'name': APP_NAME,
             'version': APP_VERSION,
-            'status': 'ready'
+            'status': 'ready',
+            'engine_ready': self._engine.is_initialized()
+        }
+
+    # === Engine Initialization ===
+
+    def start_engine_init(self) -> Dict[str, Any]:
+        """Start ML engine initialization in background.
+
+        Call this after UI loads to begin loading models without blocking.
+        """
+        if self._engine.is_initialized():
+            return {'success': True, 'message': 'Already initialized'}
+
+        if self._engine.is_initializing():
+            return {'success': True, 'message': 'Initialization in progress'}
+
+        def on_init_complete(success: bool, error: str):
+            logger.info(f"ML Engine init complete: success={success}, error={error}")
+
+        self._engine.initialize_async(callback=on_init_complete)
+        return {'success': True, 'message': 'Initialization started'}
+
+    def get_engine_status(self) -> Dict[str, Any]:
+        """Get ML engine initialization status.
+
+        Returns status for UI to display loading indicator.
+        """
+        return {
+            'initialized': self._engine.is_initialized(),
+            'initializing': self._engine.is_initializing(),
+            'error': self._engine.get_init_error()
         }
 
     # === File Dialogs ===

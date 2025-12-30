@@ -29,6 +29,15 @@ const API = {
         return this.call('get_app_info');
     },
 
+    // Engine Initialization
+    async startEngineInit() {
+        return this.call('start_engine_init');
+    },
+
+    async getEngineStatus() {
+        return this.call('get_engine_status');
+    },
+
     // File Dialogs
     async selectInputFolder() {
         return this.call('select_input_folder');

@@ -797,7 +797,13 @@ class YOLOOMRProcessor:
         return None
 
     def _process_with_grid_sampling(self, image: np.ndarray) -> OMRResult:
-        """Process OMR sheet using direct grid coordinate sampling."""
+        """Process OMR sheet using simplified corridor-based detection.
+
+        Uses unified detection logic for all fields:
+        - Loop through all bubbles in grid
+        - Check each bubble using corridor point sampling
+        - First filled bubble wins (no complex gap analysis)
+        """
         result = OMRResult(success=True)
 
         # Convert to grayscale for analysis
@@ -806,46 +812,34 @@ class YOLOOMRProcessor:
         else:
             gray = image
 
-        # Extract name from bubble grid (A-Z rows, each column = one letter position)
-        # The form has BOTH handwritten name (for human readability) AND bubble encoding
-        # We use the bubble grid for machine detection
-        raw_name, name_conf = self._sample_field_with_confidence(gray, 'name')
-        result.name = self._clean_detected_name(raw_name)
-        result.field_confidences['name'] = name_conf
+        # Extract all fields using simplified corridor-based detection
+        # Name: 25 columns × 26 rows (A-Z), returns 25-char string
+        result.name = self._detect_field_simple(gray, 'name')
+        result.field_confidences['name'] = 1.0
         result.ocr_used = False
 
-        result.roll_number, roll_conf = self._sample_field_with_confidence(gray, 'roll_number')
-        result.field_confidences['roll_number'] = roll_conf
+        # Roll number: 3 columns × 10 rows (0-9)
+        result.roll_number = self._detect_field_simple(gray, 'roll_number').strip()
+        result.field_confidences['roll_number'] = 1.0
 
-        result.class_, class_conf = self._sample_field_with_confidence(gray, 'class')
-        result.field_confidences['class'] = class_conf
+        # Class: 1 column × 8 rows (3-10)
+        result.class_ = self._detect_field_simple(gray, 'class').strip()
+        result.field_confidences['class'] = 1.0
 
-        result.section, section_conf = self._sample_field_with_confidence(gray, 'section')
-        result.field_confidences['section'] = section_conf
+        # Section: 1 column × 8 rows (A-H)
+        result.section = self._detect_field_simple(gray, 'section').strip()
+        result.field_confidences['section'] = 1.0
 
-        result.school_code, school_conf = self._sample_field_with_confidence(gray, 'school_code')
-        result.field_confidences['school_code'] = school_conf
+        # School code: 3 columns × 10 rows (0-9)
+        result.school_code = self._detect_field_simple(gray, 'school_code').strip()
+        result.field_confidences['school_code'] = 1.0
 
-        # Extract answers with confidence
-        result.answers, answer_conf = self._sample_answers_with_confidence(gray)
-        result.field_confidences['answers'] = answer_conf
+        # Answers: 60 questions × 4 options (A-D)
+        result.answers = self._detect_answers_simple(gray)
+        result.field_confidences['answers'] = 1.0
 
-        # Calculate overall confidence as weighted average
-        weights = {
-            'name': 0.15,
-            'roll_number': 0.15,
-            'class': 0.10,
-            'section': 0.10,
-            'school_code': 0.10,
-            'answers': 0.40  # Answers are most important
-        }
-
-        total_weight = sum(weights.values())
-        weighted_conf = sum(
-            result.field_confidences.get(field, 0) * weight
-            for field, weight in weights.items()
-        )
-        result.confidence = round((weighted_conf / total_weight) * 100)  # As percentage
+        # Set overall confidence (simplified - all fields use same detection logic)
+        result.confidence = 100
 
         return result
 
@@ -1238,6 +1232,187 @@ class YOLOOMRProcessor:
         )
 
         return is_filled, corridor_mean
+
+    # =========================================================================
+    # SIMPLIFIED DETECTION METHODS
+    # These methods use a unified corridor-based approach for all fields
+    # =========================================================================
+
+    def _is_bubble_filled_simple(self, gray: np.ndarray, x: int, y: int,
+                                  bubble_size: Tuple[int, int]) -> bool:
+        """Check if bubble is filled using corridor point sampling.
+
+        Simple logic: sample 20 points in the corridor (between letter and edge)
+        and check if enough are dark to indicate a fill.
+
+        Args:
+            gray: Grayscale image
+            x: X coordinate of bubble top-left
+            y: Y coordinate of bubble top-left
+            bubble_size: (width, height) of bubble
+
+        Returns:
+            True if bubble appears filled, False otherwise
+        """
+        bw, bh = bubble_size
+
+        # Bounds check
+        if not (0 <= y < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw):
+            return False
+
+        bubble = gray[y:y+bh, x:x+bw]
+        cx, cy = bw // 2, bh // 2
+
+        # Sample corridor points (between letter center and bubble edge)
+        check_points = [
+            # Top corridor
+            (6, cx), (7, cx - 2), (7, cx + 2), (6, cx - 4), (6, cx + 4),
+            # Bottom corridor
+            (bh - 7, cx), (bh - 8, cx - 2), (bh - 8, cx + 2), (bh - 7, cx - 4), (bh - 7, cx + 4),
+            # Left corridor
+            (cy, 6), (cy - 2, 7), (cy + 2, 7), (cy - 4, 6), (cy + 4, 6),
+            # Right corridor
+            (cy, bw - 7), (cy - 2, bw - 8), (cy + 2, bw - 8), (cy - 4, bw - 7), (cy + 4, bw - 7),
+        ]
+
+        corridor_values = []
+        for py, px in check_points:
+            if 0 <= py < bh and 0 <= px < bw:
+                corridor_values.append(bubble[py, px])
+
+        if not corridor_values:
+            return False
+
+        corridor_mean = np.mean(corridor_values)
+        very_dark_count = sum(1 for v in corridor_values if v < 100)
+        dark_count = sum(1 for v in corridor_values if v < 150)
+        very_dark_ratio = very_dark_count / len(corridor_values)
+        dark_ratio = dark_count / len(corridor_values)
+
+        # Check total very dark pixels in bubble
+        total_very_dark = np.sum(bubble < 50)
+        has_minimum_dark = total_very_dark > 80
+
+        # Bubble is filled if it meets any of these criteria
+        return (
+            total_very_dark > 150 or
+            (has_minimum_dark and corridor_mean < 170 and dark_ratio > 0.30) or
+            (has_minimum_dark and corridor_mean < 180 and very_dark_ratio > 0.20)
+        )
+
+    def _detect_field_simple(self, gray: np.ndarray, field_name: str) -> str:
+        """Unified detection for any field using corridor-based logic.
+
+        Simple loop: for each column, check all rows and return first filled value.
+
+        Args:
+            gray: Grayscale image (must be aligned to TARGET dimensions)
+            field_name: Name of field to detect
+
+        Returns:
+            Detected value string
+        """
+        config = self.FIELD_CONFIGS.get(field_name)
+        if not config:
+            return ""
+
+        origin = config['origin']
+        bubble_size = config['bubble_size']
+        rows_gap = config['rows_gap']
+        cols_gap = config.get('cols_gap', rows_gap)
+        num_rows = config['rows']
+        num_cols = config['cols']
+        values = config['values']
+
+        # Calibration based on field type
+        y_offset = 0
+        x_offset = 0
+
+        if field_name == 'name':
+            # Name field: full Y and X calibration
+            y_offset = self._calibrate_name_y_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows)
+            x_offset = self._calibrate_name_x_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows, y_offset)
+        elif field_name in ('class', 'section', 'roll_number', 'school_code'):
+            # Other fields: X-offset search to handle scan alignment variance
+            x_offset = self._find_best_x_offset(gray, origin, bubble_size, rows_gap, num_rows, values)
+
+        result = []
+
+        for col in range(num_cols):
+            x = origin[0] + col * cols_gap + x_offset
+            found_value = None
+
+            for row in range(num_rows):
+                y = origin[1] + y_offset + row * rows_gap
+
+                if self._is_bubble_filled_simple(gray, x, y, bubble_size):
+                    found_value = values[row]
+                    break  # First filled bubble wins
+
+            result.append(found_value if found_value else ' ')
+
+        return ''.join(result)
+
+    def _find_best_x_offset(self, gray: np.ndarray, origin: Tuple[int, int],
+                             bubble_size: Tuple[int, int], rows_gap: int,
+                             num_rows: int, values: List[str]) -> int:
+        """Find the best X offset for a field by testing offsets and finding filled bubbles.
+
+        Different scans can have horizontal shifts of 20-40 pixels.
+        This method tests offsets and returns the one where a bubble is detected.
+
+        Returns:
+            Best x_offset to apply (can be positive or negative)
+        """
+        x_offsets_to_test = [-30, -25, -20, -15, -10, -5, 0, 5, 10, 15, 20]
+
+        for x_offset in x_offsets_to_test:
+            x = origin[0] + x_offset
+
+            # Check if any bubble in this column is filled
+            for row in range(num_rows):
+                y = origin[1] + row * rows_gap
+
+                if self._is_bubble_filled_simple(gray, x, y, bubble_size):
+                    return x_offset  # Found a filled bubble at this offset
+
+        # No filled bubble found at any offset, return 0
+        return 0
+
+    def _detect_answers_simple(self, gray: np.ndarray) -> Dict[int, str]:
+        """Detect all 60 answers using corridor-based logic.
+
+        Simple loop: for each question (1-60), check options A,B,C,D
+        and return first filled option.
+
+        Args:
+            gray: Grayscale image (must be aligned to TARGET dimensions)
+
+        Returns:
+            Dict mapping question number (1-60) to answer (A/B/C/D or empty string)
+        """
+        answers = {}
+        answer_blocks = self._current_answer_blocks if hasattr(self, '_current_answer_blocks') else self.ANSWER_BLOCKS
+        row_positions = self._current_answer_row_positions if hasattr(self, '_current_answer_row_positions') else self.ANSWER_ROW_POSITIONS
+
+        for block in answer_blocks:
+            block_x = block['origin'][0]
+
+            for q_idx, q_num in enumerate(block['questions']):
+                y = row_positions[q_idx]
+                found_answer = ''
+
+                # Check options A, B, C, D
+                for opt_idx, option in enumerate(self.ANSWER_VALUES):
+                    x = block_x + opt_idx * self.ANSWER_OPTION_GAP
+
+                    if self._is_bubble_filled_simple(gray, x, y, self.ANSWER_BUBBLE_SIZE):
+                        found_answer = option
+                        break  # First filled option wins
+
+                answers[q_num] = found_answer
+
+        return answers
 
     def _sample_field(self, gray: np.ndarray, field_name: str) -> str:
         """Sample a field by reading bubble darkness at grid coordinates."""
