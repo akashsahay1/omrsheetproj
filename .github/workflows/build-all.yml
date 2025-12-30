@@ -26,12 +26,27 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller pyinstaller-hooks-contrib
+          pip install pyinstaller pyinstaller-hooks-contrib pytest
           # Core dependencies
           pip install opencv-python numpy pandas pywebview openpyxl Pillow jsonschema rich matplotlib dotmap deepmerge screeninfo
           # ML/AI dependencies for name detection (CPU-only PyTorch for faster build)
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install easyocr
+
+      - name: Run unit tests
+        run: |
+          python -m pytest tests/test_omr_engine.py -v --tb=short
+        continue-on-error: true
+
+      - name: Run regression tests (if golden dataset exists)
+        run: |
+          if (Test-Path "golden_dataset/ground_truth.json") {
+            python -m pytest tests/test_regression.py -v --tb=short
+          } else {
+            Write-Host "Skipping regression tests - no golden dataset"
+          }
+        shell: pwsh
+        continue-on-error: true
 
       - name: Build Windows executable
         run: |
@@ -61,7 +76,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller pyinstaller-hooks-contrib
+          pip install pyinstaller pyinstaller-hooks-contrib pytest
           # Core dependencies
           pip install opencv-python numpy pandas pywebview openpyxl Pillow jsonschema rich matplotlib dotmap deepmerge screeninfo
           # macOS-specific
@@ -69,6 +84,20 @@ jobs:
           # ML/AI dependencies for name detection
           pip install torch torchvision
           pip install easyocr
+
+      - name: Run unit tests
+        run: |
+          python -m pytest tests/test_omr_engine.py -v --tb=short
+        continue-on-error: true
+
+      - name: Run regression tests (if golden dataset exists)
+        run: |
+          if [ -f "golden_dataset/ground_truth.json" ]; then
+            python -m pytest tests/test_regression.py -v --tb=short
+          else
+            echo "Skipping regression tests - no golden dataset"
+          fi
+        continue-on-error: true
 
       - name: Build macOS app
         run: |
