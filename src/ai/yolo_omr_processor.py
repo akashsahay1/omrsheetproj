@@ -103,9 +103,9 @@ class YOLOOMRProcessor:
             # The name bubble grid is on the left side of the form
             # Each column represents one letter position, rows A-Z for letters
             # Origin is top-left of first bubble (row A, col 0)
-            # Detected bubble centers at (180, 718), subtract half bubble_size for top-left
+            # Calibrated 2025-12-31: Fine-tuned to align perfectly with bubble grid
             # Default origin - will be adjusted per-image based on batch detection
-            'origin': (189, 671),  # Works for Khoj batch (most common)
+            'origin': (185, 686),  # Khoj batch (final calibration: right 13px, up 17px)
             'origin_chayan': (180, 710),  # Recalibrated for Chayan batch (39_*.jpg files)
             'bubble_size': (33, 33),
             'rows_gap': 52,  # Vertical distance between A,B,C... rows
@@ -188,32 +188,36 @@ class YOLOOMRProcessor:
     # Row positions calibrated from actual filled bubbles
     # Gaps are approximately 80-90 pixels between rows
     # Row positions for Khoj batch (TOP-LEFT of bubbles)
+    # IMPORTANT: First position is the LABEL ROW (A B C D markers), NOT Q1!
     # Detected centers: Q1≈2109, Q2≈2189, Q3≈2282; subtract 14 for top-left
     ANSWER_ROW_POSITIONS = [
-        2095,  # Q1 (center 2109 - 14)
-        2175,  # Q2 (center 2189 - 14)
-        2268,  # Q3 (center 2282 - 14)
-        2361,  # Q4
-        2454,  # Q5
-        2547,  # Q6
-        2640,  # Q7
-        2733,  # Q8
-        2826,  # Q9
-        2919,  # Q10
+        2095,  # Label row (A B C D markers)
+        2175,  # Q1 (center 2189 - 14)
+        2268,  # Q2 (center 2282 - 14)
+        2361,  # Q3
+        2454,  # Q4
+        2547,  # Q5
+        2640,  # Q6
+        2733,  # Q7
+        2826,  # Q8
+        2919,  # Q9
+        3012,  # Q10 (estimated, ~93px gap from Q9)
     ]
     # Chayan batch row positions (TOP-LEFT of bubbles, not centers)
+    # IMPORTANT: First position is the LABEL ROW (A B C D markers), NOT Q1!
     # Detected centers: Q1≈2126, Q2≈2207, Q3≈2299; subtract 14 for top-left
     ANSWER_ROW_POSITIONS_CHAYAN = [
-        2112,  # Q1 (center 2126 - 14)
-        2193,  # Q2 (center 2207 - 14)
-        2285,  # Q3 (center 2299 - 14)
-        2377,  # Q4
-        2469,  # Q5
-        2561,  # Q6
-        2653,  # Q7
-        2745,  # Q8
-        2837,  # Q9
-        2929,  # Q10
+        2112,  # Label row (A B C D markers)
+        2193,  # Q1 (center 2207 - 14)
+        2285,  # Q2 (center 2299 - 14)
+        2377,  # Q3
+        2469,  # Q4
+        2561,  # Q5
+        2653,  # Q6
+        2745,  # Q7
+        2837,  # Q8
+        2929,  # Q9
+        3021,  # Q10 (estimated, ~92px gap from Q9)
     ]
     ANSWER_VALUES = list('ABCD')
 
@@ -252,11 +256,15 @@ class YOLOOMRProcessor:
             self.reference_image = cv2.imread(reference_image_path)
 
         # Load ML bubble classifier (binary filled/empty classification)
-        # Prefer v2 model trained on expanded dataset
+        # Prefer v4 model trained with RELATIVE labeling (1040 filled + 12550 empty)
         if bubble_classifier_path is None:
             bubble_default_paths = [
+                Path(__file__).parent.parent.parent / "models" / "bubble_classifier_v4.pt",
+                Path(__file__).parent.parent.parent / "models" / "bubble_classifier_v3.pt",
                 Path(__file__).parent.parent.parent / "models" / "bubble_classifier_v2.pt",
                 Path(__file__).parent.parent.parent / "models" / "name_bubble_classifier.pt",
+                Path("models/bubble_classifier_v4.pt"),
+                Path("models/bubble_classifier_v3.pt"),
                 Path("models/bubble_classifier_v2.pt"),
             ]
             for p in bubble_default_paths:
@@ -359,24 +367,8 @@ class YOLOOMRProcessor:
             OMRResult with extracted data
         """
         try:
-            # Detect batch and adjust grid origins based on filename pattern
-            # Chayan batch: files starting with "39_" have different grid alignment
-            import os
-            filename = os.path.basename(image_path)
-            self._is_chayan_batch = filename.startswith('39_')
-
-            if self._is_chayan_batch:
-                # Chayan batch - use adjusted origins
-                self.FIELD_CONFIGS['name']['origin'] = self.FIELD_CONFIGS['name'].get('origin_chayan', (180, 710))
-                self._current_answer_blocks = self.ANSWER_BLOCKS_CHAYAN
-                self._current_answer_row_positions = self.ANSWER_ROW_POSITIONS_CHAYAN
-            else:
-                # Default/Khoj batch
-                self.FIELD_CONFIGS['name']['origin'] = (189, 671)
-                self._current_answer_blocks = self.ANSWER_BLOCKS
-                self._current_answer_row_positions = self.ANSWER_ROW_POSITIONS
-
             # Load image
+            import os
             image = cv2.imread(image_path)
             if image is None:
                 return OMRResult(
@@ -386,6 +378,20 @@ class YOLOOMRProcessor:
 
             # Align image to target dimensions
             aligned = self._align_image(image)
+
+            # Auto-detect batch type by form color (Blue=Chayan, Red=Khoj)
+            self._is_chayan_batch = self._detect_best_origin(aligned)
+
+            if self._is_chayan_batch:
+                # Chayan batch - use adjusted origins
+                self.FIELD_CONFIGS['name']['origin'] = self.FIELD_CONFIGS['name'].get('origin_chayan', (180, 710))
+                self._current_answer_blocks = self.ANSWER_BLOCKS_CHAYAN
+                self._current_answer_row_positions = self.ANSWER_ROW_POSITIONS_CHAYAN
+            else:
+                # Default/Khoj batch
+                self.FIELD_CONFIGS['name']['origin'] = (185, 686)  # Calibrated 2025-12-31
+                self._current_answer_blocks = self.ANSWER_BLOCKS
+                self._current_answer_row_positions = self.ANSWER_ROW_POSITIONS
 
             # Extract fields using grid-based sampling
             if self.model:
@@ -812,26 +818,29 @@ class YOLOOMRProcessor:
         else:
             gray = image
 
-        # Extract all fields using simplified corridor-based detection
+        # Extract all fields using pure ML detection (if available) or threshold fallback
         # Name: 25 columns × 26 rows (A-Z), returns 25-char string
-        result.name = self._detect_field_simple(gray, 'name')
+        if self.bubble_classifier:
+            result.name = self._sample_field_ml(gray, 'name')  # Pure ML (better than hybrid)
+        else:
+            result.name = self._detect_field_simple(gray, 'name')  # Fallback to threshold
         result.field_confidences['name'] = 1.0
         result.ocr_used = False
 
         # Roll number: 3 columns × 10 rows (0-9)
-        result.roll_number = self._detect_field_simple(gray, 'roll_number').strip()
+        result.roll_number = self._sample_field(gray, 'roll_number').strip()
         result.field_confidences['roll_number'] = 1.0
 
         # Class: 1 column × 8 rows (3-10)
-        result.class_ = self._detect_field_simple(gray, 'class').strip()
+        result.class_ = self._sample_field(gray, 'class').strip()
         result.field_confidences['class'] = 1.0
 
         # Section: 1 column × 8 rows (A-H)
-        result.section = self._detect_field_simple(gray, 'section').strip()
+        result.section = self._sample_field(gray, 'section').strip()
         result.field_confidences['section'] = 1.0
 
         # School code: 3 columns × 10 rows (0-9)
-        result.school_code = self._detect_field_simple(gray, 'school_code').strip()
+        result.school_code = self._sample_field(gray, 'school_code').strip()
         result.field_confidences['school_code'] = 1.0
 
         # Answers: 60 questions × 4 options (A-D)
@@ -982,6 +991,53 @@ class YOLOOMRProcessor:
 
         return name
 
+    def _detect_best_origin(self, aligned_bgr: np.ndarray) -> bool:
+        """
+        Auto-detect whether to use Chayan or Khoj origin by form color.
+
+        Chayan forms are BLUE, Khoj forms are RED.
+
+        Args:
+            aligned_bgr: Aligned BGR color image
+
+        Returns:
+            True if Chayan batch (blue form), False if Khoj batch (red form)
+        """
+        # Sample from bubble grid areas where form color is visible
+        # Multiple regions to get better average
+        regions = [
+            aligned_bgr[700:900, 200:400],    # Name field area
+            aligned_bgr[1500:1700, 1200:1400],  # Center bubble area
+            aligned_bgr[2200:2400, 500:700],    # Answer grid area
+        ]
+
+        # Calculate average color across all regions
+        all_blues = []
+        all_greens = []
+        all_reds = []
+
+        for region in regions:
+            if region.size > 0:
+                all_blues.append(np.mean(region[:, :, 0]))
+                all_greens.append(np.mean(region[:, :, 1]))
+                all_reds.append(np.mean(region[:, :, 2]))
+
+        avg_b = np.mean(all_blues) if all_blues else 255
+        avg_g = np.mean(all_greens) if all_greens else 255
+        avg_r = np.mean(all_reds) if all_reds else 255
+
+        # Detect dominant color
+        # Blue forms: B > R (blue dominant)
+        # Red forms: R > B (red dominant)
+        is_blue = avg_b > avg_r + 5  # Blue > Red by at least 5
+
+        # Debug output
+        import sys
+        print(f"[DEBUG] Form color BGR: B={avg_b:.1f}, G={avg_g:.1f}, R={avg_r:.1f}", file=sys.stderr)
+        print(f"[DEBUG] Detected batch: {'Chayan (BLUE)' if is_blue else 'Khoj (RED)'}", file=sys.stderr)
+
+        return is_blue
+
     def _calibrate_name_y_offset(self, gray: np.ndarray, origin: Tuple[int, int],
                                   bubble_size: Tuple[int, int], rows_gap: int,
                                   cols_gap: int, num_rows: int) -> int:
@@ -998,10 +1054,10 @@ class YOLOOMRProcessor:
         """
         # Test columns 0-9 (first 10 letters of name)
         test_cols = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-        # Chayan files typically need negative offsets, limit positive range
-        # Khoj files can need either direction
+        # Chayan files have pre-calibrated origins, only need small adjustments
+        # Khoj files may need larger adjustments
         if hasattr(self, '_is_chayan_batch') and self._is_chayan_batch:
-            y_offsets_to_test = list(range(-60, 15, 5))  # -60 to +10 for Chayan
+            y_offsets_to_test = list(range(-15, 16, 5))  # ±15 pixels for Chayan (already calibrated)
         else:
             y_offsets_to_test = list(range(-60, 55, 5))  # Full range for Khoj
 
@@ -1129,7 +1185,11 @@ class YOLOOMRProcessor:
         Different scans can have horizontal shifts of 10-30 pixels. This finds the
         x_offset that produces the clearest bubble detection (largest gaps).
         """
-        x_offsets_to_test = list(range(-40, 20, 5))
+        # Chayan batch has pre-calibrated X origin, only need small adjustments
+        if hasattr(self, '_is_chayan_batch') and self._is_chayan_batch:
+            x_offsets_to_test = list(range(-10, 11, 5))  # ±10 pixels for Chayan
+        else:
+            x_offsets_to_test = list(range(-40, 20, 5))  # Full range for Khoj
         offset_scores = []
 
         # Test on first 5 columns
@@ -1222,11 +1282,12 @@ class YOLOOMRProcessor:
         # A bubble is filled if it has significantly more very dark pixels
         # than just the printed letter (which typically has ~100-130 pixels < 50)
         # OR if the corridor shows clear fill indicators
-        # IMPORTANT: Must have at least some very dark pixels (>80) to be considered filled
+        # IMPORTANT: Must have at least some very dark pixels (>50) to be considered filled
         # This prevents false positives from moderately dark printed letters
-        has_minimum_dark = total_very_dark > 80
+        # Lowered threshold to 100 to catch lighter fills (was 150)
+        has_minimum_dark = total_very_dark > 50
         is_filled = (
-            total_very_dark > 150 or  # More dark pixels than typical printed letter
+            total_very_dark > 100 or  # More dark pixels than typical printed letter (lowered from 150)
             (has_minimum_dark and corridor_mean < 170 and dark_ratio > 0.30) or  # Corridor shows fill
             (has_minimum_dark and corridor_mean < 180 and very_dark_ratio > 0.20)  # Very dark in corridor
         )
@@ -1240,10 +1301,7 @@ class YOLOOMRProcessor:
 
     def _is_bubble_filled_simple(self, gray: np.ndarray, x: int, y: int,
                                   bubble_size: Tuple[int, int]) -> bool:
-        """Check if bubble is filled using corridor point sampling.
-
-        Simple logic: sample 20 points in the corridor (between letter and edge)
-        and check if enough are dark to indicate a fill.
+        """Check if bubble is filled using ML classifier.
 
         Args:
             gray: Grayscale image
@@ -1260,50 +1318,26 @@ class YOLOOMRProcessor:
         if not (0 <= y < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw):
             return False
 
+        # Extract bubble image
         bubble = gray[y:y+bh, x:x+bw]
-        cx, cy = bw // 2, bh // 2
 
-        # Sample corridor points (between letter center and bubble edge)
-        check_points = [
-            # Top corridor
-            (6, cx), (7, cx - 2), (7, cx + 2), (6, cx - 4), (6, cx + 4),
-            # Bottom corridor
-            (bh - 7, cx), (bh - 8, cx - 2), (bh - 8, cx + 2), (bh - 7, cx - 4), (bh - 7, cx + 4),
-            # Left corridor
-            (cy, 6), (cy - 2, 7), (cy + 2, 7), (cy - 4, 6), (cy + 4, 6),
-            # Right corridor
-            (cy, bw - 7), (cy - 2, bw - 8), (cy + 2, bw - 8), (cy - 4, bw - 7), (cy + 4, bw - 7),
-        ]
+        # Use ML classifier if available
+        if hasattr(self, 'ml_classifier') and self.ml_classifier is not None:
+            try:
+                is_filled, confidence = self.ml_classifier.predict(bubble)
+                return is_filled
+            except:
+                pass  # Fall back to threshold if ML fails
 
-        corridor_values = []
-        for py, px in check_points:
-            if 0 <= py < bh and 0 <= px < bw:
-                corridor_values.append(bubble[py, px])
-
-        if not corridor_values:
-            return False
-
-        corridor_mean = np.mean(corridor_values)
-        very_dark_count = sum(1 for v in corridor_values if v < 100)
-        dark_count = sum(1 for v in corridor_values if v < 150)
-        very_dark_ratio = very_dark_count / len(corridor_values)
-        dark_ratio = dark_count / len(corridor_values)
-
-        # Check total very dark pixels in bubble
-        total_very_dark = np.sum(bubble < 50)
-        has_minimum_dark = total_very_dark > 80
-
-        # Bubble is filled if it meets any of these criteria
-        return (
-            total_very_dark > 150 or
-            (has_minimum_dark and corridor_mean < 170 and dark_ratio > 0.30) or
-            (has_minimum_dark and corridor_mean < 180 and very_dark_ratio > 0.20)
-        )
+        # Fallback: simple threshold (if ML not available)
+        very_dark_pixels = np.sum(bubble < 50)
+        return very_dark_pixels > 200
 
     def _detect_field_simple(self, gray: np.ndarray, field_name: str) -> str:
-        """Unified detection for any field using corridor-based logic.
+        """Unified detection for any field using row-by-row checking.
 
-        Simple loop: for each column, check all rows and return first filled value.
+        Checks each bubble individually in order (A, B, C...) and returns
+        the FIRST filled bubble found.
 
         Args:
             gray: Grayscale image (must be aligned to TARGET dimensions)
@@ -1329,9 +1363,10 @@ class YOLOOMRProcessor:
         x_offset = 0
 
         if field_name == 'name':
-            # Name field: full Y and X calibration
-            y_offset = self._calibrate_name_y_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows)
-            x_offset = self._calibrate_name_x_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows, y_offset)
+            # Both batch origins are pre-calibrated for aligned images
+            # Skip calibration to avoid overshoot
+            y_offset = 0
+            x_offset = 0
         elif field_name in ('class', 'section', 'roll_number', 'school_code'):
             # Other fields: X-offset search to handle scan alignment variance
             x_offset = self._find_best_x_offset(gray, origin, bubble_size, rows_gap, num_rows, values)
@@ -1339,17 +1374,53 @@ class YOLOOMRProcessor:
         result = []
 
         for col in range(num_cols):
+            # Calculate X position with grid spacing irregularities
             x = origin[0] + col * cols_gap + x_offset
-            found_value = None
 
+            # For name field: add extra spacing after column 10
+            if field_name == 'name' and col > 10:
+                x += 54
+
+            # Compare ALL bubbles in this column to find the most filled one
+            bubble_data = []
             for row in range(num_rows):
                 y = origin[1] + y_offset + row * rows_gap
+                y1, y2 = y, y + bubble_size[1]
+                x1, x2 = x, x + bubble_size[0]
 
-                if self._is_bubble_filled_simple(gray, x, y, bubble_size):
-                    found_value = values[row]
-                    break  # First filled bubble wins
+                if 0 <= y1 and y2 <= gray.shape[0] and 0 <= x1 and x2 <= gray.shape[1]:
+                    bubble = gray[y1:y2, x1:x2]
+                    mean_val = np.mean(bubble)
+                    very_dark = np.sum(bubble < 50)
+                    bubble_data.append((row, mean_val, very_dark))
 
-            result.append(found_value if found_value else ' ')
+            if not bubble_data:
+                result.append(' ')
+                continue
+
+            # Sort by very_dark_pixels (descending) then by mean (ascending)
+            # This finds the bubble with most dark pixels (most filled)
+            bubble_data.sort(key=lambda x: (-x[2], x[1]))
+            darkest_row, darkest_mean, darkest_vdark = bubble_data[0]
+
+            # Calculate gap from second-darkest
+            if len(bubble_data) > 1:
+                second_vdark = bubble_data[1][2]
+                gap_vdark = darkest_vdark - second_vdark
+            else:
+                gap_vdark = darkest_vdark
+
+            # Data-driven detection:
+            # From analysis: Filled min=208 vdark, Empty max (95%)=215 vdark
+            # Key: If darkest bubble has significantly more dark pixels than others, it's filled
+            is_filled = (
+                (darkest_vdark > 220 and gap_vdark > 100) or  # Clear winner with strong fill
+                (darkest_vdark > 180 and gap_vdark > 80 and darkest_mean < 150) or  # Strong fill
+                (darkest_vdark > 150 and gap_vdark > 60 and darkest_mean < 130) or  # Moderate fill
+                (darkest_vdark > 300)  # Very strong absolute fill
+            )
+
+            result.append(values[darkest_row] if is_filled else ' ')
 
         return ''.join(result)
 
@@ -1399,12 +1470,23 @@ class YOLOOMRProcessor:
             block_x = block['origin'][0]
 
             for q_idx, q_num in enumerate(block['questions']):
-                y = row_positions[q_idx]
+                # IMPORTANT: row_positions[0] is the LABEL ROW (A B C D markers), not Q1
+                # Q1 is at row_positions[1], Q2 at row_positions[2], etc.
+                # So use q_idx + 1 to skip the label row
+                y = row_positions[q_idx + 1]
+
+                # Adjust to center the sampling box on the bubble
+                # Coordinates are for top-left, but we need to center on bubble
+                y = y + self.ANSWER_BUBBLE_SIZE[1] // 2
+
                 found_answer = ''
 
                 # Check options A, B, C, D
                 for opt_idx, option in enumerate(self.ANSWER_VALUES):
                     x = block_x + opt_idx * self.ANSWER_OPTION_GAP
+
+                    # Adjust X to center horizontally
+                    x = x - self.ANSWER_BUBBLE_SIZE[0] // 2
 
                     if self._is_bubble_filled_simple(gray, x, y, self.ANSWER_BUBBLE_SIZE):
                         found_answer = option
@@ -1443,6 +1525,11 @@ class YOLOOMRProcessor:
         num_cols = config['cols']
         values = config['values']
 
+        # Debug output for name field
+        if field_name == 'name':
+            import sys
+            print(f"[DEBUG] _sample_field_with_confidence using origin: {origin} for name field", file=sys.stderr)
+
         preserve_spaces = (field_name == 'name')
         result_chars = []
         column_confidences = []
@@ -1462,9 +1549,8 @@ class YOLOOMRProcessor:
             x_offset_calibrated = self._calibrate_name_x_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows, y_offset)
 
         for col in range(num_cols):
-            # For name field: stop after 3+ consecutive empty columns (name has ended)
-            if field_name == 'name' and consecutive_empty >= 3:
-                break
+            # For name field: check all 25 columns (don't stop early)
+            # This allows names like "A<spaces>Z" to be detected correctly
             x_base = origin[0] + col * cols_gap + x_offset_calibrated
 
             # Search for best x-offset (one with largest gap)
@@ -1658,8 +1744,9 @@ class YOLOOMRProcessor:
                 consecutive_empty += 1
 
         result = ''.join(result_chars)
-        if preserve_spaces:
-            result = ' '.join(result.split())
+        # Don't normalize spaces - preserve exact spacing as detected
+        # if preserve_spaces:
+        #     result = ' '.join(result.split())
 
         # Average confidence across columns (exclude empty columns for non-name fields)
         if column_confidences:
@@ -1683,6 +1770,11 @@ class YOLOOMRProcessor:
         num_cols = config['cols']
         values = config['values']
 
+        # Debug output for name field
+        if field_name == 'name':
+            import sys
+            print(f"[DEBUG] _sample_field_hybrid using origin: {origin} for name field", file=sys.stderr)
+
         preserve_spaces = (field_name == 'name')
         result_chars = []
         consecutive_empty = 0
@@ -1695,9 +1787,8 @@ class YOLOOMRProcessor:
             x_offset_calibrated = self._calibrate_name_x_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows, y_offset)
 
         for col in range(num_cols):
-            # Stop after 3 consecutive empty columns for name field
-            if field_name == 'name' and consecutive_empty >= 3:
-                break
+            # For name field: check all 25 columns (don't stop early)
+            # This allows names like "A<spaces>Z" to be detected correctly
 
             x = origin[0] + col * cols_gap + x_offset_calibrated
 
@@ -1802,26 +1893,34 @@ class YOLOOMRProcessor:
                            for b in bubble_images]
             predictions = self.bubble_classifier.predict_batch(bubble_images)
 
-            filled_bubbles = []
-            for (row, _, _), (is_filled, conf) in zip(bubbles_data, predictions):
-                if is_filled and conf > 0.6:  # Higher confidence threshold
-                    filled_bubbles.append((row, conf))
+            # Score ALL bubbles and pick the ONE with highest "filled" confidence
+            # Tie-breaker: if multiple have same score, pick the FIRST one (lowest row)
+            bubble_scores = []
+            for (row, bubble_img, darkness), (is_filled, conf) in zip(bubbles_data, predictions):
+                filled_score = conf if is_filled else (1 - conf)
+                bubble_scores.append((row, filled_score, darkness))
 
-            if filled_bubbles:
-                # Pick the FIRST filled bubble (lowest row number) instead of highest confidence
-                # This ensures we get the correct letter when multiple bubbles are filled
-                best_row, _ = min(filled_bubbles, key=lambda x: x[0])  # Sort by row number
-                if best_row < len(values):
-                    result_chars.append(values[best_row])
-                    consecutive_empty = 0
+            if bubble_scores:
+                # Pick bubble with highest filled_score, then FIRST row, then darkest
+                best_row, best_score, _ = max(bubble_scores, key=lambda x: (x[1], -x[0], -x[2]))
+
+                # Only mark as filled if score is high enough
+                if best_score > 0.6:
+                    if best_row < len(values):
+                        result_chars.append(values[best_row])
+                        consecutive_empty = 0
+                elif preserve_spaces:
+                    result_chars.append(' ')
+                    consecutive_empty += 1
             elif preserve_spaces:
                 result_chars.append(' ')
                 consecutive_empty += 1
 
         result = ''.join(result_chars)
 
-        if preserve_spaces:
-            result = ' '.join(result.split())
+        # Don't normalize spaces - preserve exact spacing as detected
+        # if preserve_spaces:
+        #     result = ' '.join(result.split())
 
         return result
 
@@ -1853,9 +1952,10 @@ class YOLOOMRProcessor:
 
                 if 0 <= y < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw:
                     bubble = gray[y:y+bh, x:x+bw].copy()
+                    darkness = np.mean(bubble)  # Calculate before resizing
                     if bubble.shape != (28, 28):
                         bubble = cv2.resize(bubble, (28, 28))
-                    bubbles.append((row, bubble))
+                    bubbles.append((row, bubble, darkness))
 
             if not bubbles:
                 if preserve_spaces:
@@ -1866,18 +1966,24 @@ class YOLOOMRProcessor:
             bubble_images = [b[1] for b in bubbles]
             predictions = self.bubble_classifier.predict_batch(bubble_images)
 
-            # Find the filled bubble with highest confidence
-            filled_bubbles = []
-            for (row, _), (is_filled, conf) in zip(bubbles, predictions):
-                if is_filled:
-                    filled_bubbles.append((row, conf))
+            # Score ALL bubbles and pick the ONE with highest "filled" confidence
+            # Tie-breaker: if multiple have same score, pick the FIRST one (lowest row = A before B before C)
+            # This handles cases where student accidentally filled multiple bubbles in same column
+            bubble_scores = []
+            for (row, _, darkness), (is_filled, conf) in zip(bubbles, predictions):
+                filled_score = conf if is_filled else (1 - conf)
+                # Tie-breaker: prefer lower row number (A=0 before B=1 before C=2, etc.)
+                bubble_scores.append((row, filled_score, darkness))
 
-            if filled_bubbles:
-                # Pick the FIRST filled bubble (lowest row number) instead of highest confidence
-                # This ensures we get the correct letter when multiple bubbles are filled
-                best_row, _ = min(filled_bubbles, key=lambda x: x[0])  # Sort by row number
-                if best_row < len(values):
+            if bubble_scores:
+                # Pick bubble with highest filled_score, then FIRST row (lowest), then darkest
+                best_row, best_score, _ = max(bubble_scores, key=lambda x: (x[1], -x[0], -x[2]))
+
+                # Only mark as filled if score is high enough
+                if best_score > 0.6 and best_row < len(values):
                     result_chars.append(values[best_row])
+                elif preserve_spaces:
+                    result_chars.append(' ')
             elif preserve_spaces:
                 result_chars.append(' ')
 

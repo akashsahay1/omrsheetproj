@@ -61,8 +61,9 @@ class MLEngine:
         # Reference image for alignment
         self._reference_path = self._base_path / 'OMRChecker' / 'inputs' / 'VidyaBharti2025' / 'omr-filled.png'
 
-        # ML model paths
-        self._bubble_classifier_path = self._models_path / 'bubble_classifier.pt'
+        # ML model paths - let YOLOOMRProcessor choose the best available model
+        # (it will prioritize v4, v3, v2 in that order)
+        self._bubble_classifier_path = None
 
         # Only initialize immediately if not lazy loading
         if not lazy:
@@ -86,15 +87,14 @@ class MLEngine:
                         self._reference_path = alt
                         break
 
-            # Check bubble classifier
+            # Check bubble classifier - pass None to let YOLOOMRProcessor auto-select
+            # (it will prioritize v4 > v3 > v2)
             bubble_path = None
-            if self._bubble_classifier_path.exists():
+            if self._bubble_classifier_path is not None and self._bubble_classifier_path.exists():
                 bubble_path = str(self._bubble_classifier_path)
                 logger.info(f"Using ML bubble classifier: {bubble_path}")
-            else:
-                logger.warning("Bubble classifier not found, using threshold-based detection")
 
-            # Initialize processor
+            # Initialize processor (passing None for bubble_classifier_path enables auto-selection)
             self._processor = YOLOOMRProcessor(
                 reference_image_path=str(self._reference_path) if self._reference_path.exists() else None,
                 bubble_classifier_path=bubble_path
