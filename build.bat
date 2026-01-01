@@ -1,44 +1,22 @@
 @echo off
-echo ===============================================
-echo  OMR Processor - Build Executable
-echo ===============================================
+REM Quick build script for development testing
+REM Builds the application without optimization for faster builds
+
+echo Building VB OMR Scanner (Development Mode)...
 echo.
 
-REM Check if venv exists
-if not exist "venv\Scripts\python.exe" (
-    echo ERROR: Virtual environment not found!
-    echo Please run setup.bat first.
-    pause
-    exit /b 1
-)
-
-REM Activate venv
+REM Activate virtual environment
 call venv\Scripts\activate.bat
 
-REM Install PyInstaller if not present
-pip install pyinstaller
+REM Build with PyInstaller (development mode - faster)
+pyinstaller build.spec --noconfirm
 
-echo.
-echo Building executable...
-echo This may take several minutes...
-echo.
-
-pyinstaller --clean build.spec
-
-if errorlevel 1 (
+if exist "dist\VB OMR Scanner.exe" (
     echo.
-    echo ERROR: Build failed!
-    pause
+    echo Build successful\! Executable: dist\VB OMR Scanner.exe
+    echo.
+) else (
+    echo.
+    echo Build failed\! Check errors above.
     exit /b 1
 )
-
-echo.
-echo ===============================================
-echo  Build completed successfully!
-echo ===============================================
-echo.
-echo Executable location: dist\VB OMR Scanner.exe
-echo.
-echo To create an installer, run: build_installer.bat
-echo.
-pause

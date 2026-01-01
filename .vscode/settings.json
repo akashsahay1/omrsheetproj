@@ -1,0 +1,56 @@
+{
+  // Exclude large folders from VS Code file watching to prevent freezing
+  "files.watcherExclude": {
+    "**/venv/**": true,
+    "**/node_modules/**": true,
+    "**/build/**": true,
+    "**/dist/**": true,
+    "**/outputs/**": true,
+    "**/filledomrsheet/**": true,
+    "**/archive_old_scripts/**": true,
+    "**/__pycache__/**": true,
+    "**/bubble_samples/**": true,
+    "**/bubble_training_data/**": true,
+    "**/ocr_debug/**": true,
+    "**/grid_debug/**": true,
+    "**/*.pyc": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true
+  },
+
+  // Exclude from search to improve performance
+  "search.exclude": {
+    "**/venv/**": true,
+    "**/node_modules/**": true,
+    "**/build/**": true,
+    "**/dist/**": true,
+    "**/outputs/**": true,
+    "**/filledomrsheet/**": true,
+    "**/archive_old_scripts/**": true,
+    "**/__pycache__/**": true,
+    "**/bubble_samples/**": true,
+    "**/bubble_training_data/**": true,
+    "**/ocr_debug/**": true,
+    "**/grid_debug/**": true,
+    "**/*.pyc": true
+  },
+
+  // Exclude from file explorer
+  "files.exclude": {
+    "**/__pycache__/**": true,
+    "**/*.pyc": true,
+    "**/build/**": false,
+    "**/dist/**": false
+  },
+
+  // Python settings
+  "python.defaultInterpreterPath": "${workspaceFolder}/venv/Scripts/python.exe",
+
+  // Git settings
+  "git.ignoreLimitWarning": true,
+  "git.untrackedChanges": "hidden",
+
+  // Performance settings
+  "files.maxMemoryForLargeFilesMB": 4096,
+  "search.maxResults": 10000
+}

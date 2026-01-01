@@ -1,23 +1,52 @@
 @echo off
-REM VB OMR Scanner - Build and Package Script
-REM Run this to build signed exe and MSI installer
+REM Release build script - Creates MSI installer
+REM This script builds optimized executable and creates MSI package
 
+echo ============================================
+echo VB OMR Scanner - Release Build + MSI
+echo ============================================
 echo.
-echo =============================================
-echo VB OMR Scanner - Build Release
-echo =============================================
+
+REM Activate virtual environment
+call venv\Scripts\activate.bat
+
+REM Clean previous builds
+echo Cleaning previous builds...
+if exist build rmdir /s /q build
+if exist dist rmdir /s /q dist
 echo.
 
-REM Run the PowerShell build script
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build_release.ps1" %*
+REM Build with PyInstaller (optimized)
+echo Building executable (this may take 5-10 minutes)...
+pyinstaller --clean build.spec
 
-if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo Build failed with error code: %ERRORLEVEL%
-    pause
-    exit /b %ERRORLEVEL%
+if not exist "dist\VB OMR Scanner.exe" (
+    echo ERROR: Build failed\!
+    exit /b 1
 )
 
 echo.
-echo Build completed successfully!
+echo Build successful\!
+echo.
+
+REM Create MSI using create_msi.py script
+echo Creating MSI installer...
+python create_msi.py
+
+if exist "dist\VBOMRScanner-1.0.0-win64.msi" (
+    echo.
+    echo ============================================
+    echo SUCCESS\! Installer created:
+    echo dist\VBOMRScanner-1.0.0-win64.msi
+    echo ============================================
+    echo.
+) else (
+    echo.
+    echo WARNING: MSI creation may have failed.
+    echo Check the output above for errors.
+    echo.
+    echo Executable is available at: dist\VB OMR Scanner.exe
+    echo.
+)
+
 pause

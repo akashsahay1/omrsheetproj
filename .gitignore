@@ -9,7 +9,6 @@ ENV/
 env/
 
 # IDE
-.vscode/
 .idea/
 
 # Build
@@ -48,6 +47,14 @@ nul
 # Data
 data/
 exports/
+outputs/
+filledomrsheet/
+archive_old_scripts/
+models/*.pt
+bubble_samples/
+bubble_training_data/
+ocr_debug/
+grid_debug/
 
 # Logs (ignore log files but keep the folder)
 logs/*.log
