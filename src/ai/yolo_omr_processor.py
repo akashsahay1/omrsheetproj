@@ -106,7 +106,7 @@ class YOLOOMRProcessor:
             # Calibrated 2025-12-31: Fine-tuned to align perfectly with bubble grid
             # Default origin - will be adjusted per-image based on batch detection
             'origin': (185, 686),  # Khoj batch (final calibration: right 13px, up 17px)
-            'origin_chayan': (180, 710),  # Recalibrated for Chayan batch (39_*.jpg files)
+            'origin_chayan': (180, 680),  # Chayan batch - calibrated 2026-01-01: 30px up from original (710→680)
             'bubble_size': (33, 33),
             'rows_gap': 52,  # Vertical distance between A,B,C... rows
             'cols_gap': 54,  # Horizontal distance between letter columns
