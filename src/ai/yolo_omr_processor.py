@@ -1301,7 +1301,7 @@ class YOLOOMRProcessor:
 
     def _is_bubble_filled_simple(self, gray: np.ndarray, x: int, y: int,
                                   bubble_size: Tuple[int, int]) -> bool:
-        """Check if bubble is filled using ML classifier.
+        """Check if bubble is filled using ML classifier with threshold fallback.
 
         Args:
             gray: Grayscale image
@@ -1321,15 +1321,15 @@ class YOLOOMRProcessor:
         # Extract bubble image
         bubble = gray[y:y+bh, x:x+bw]
 
-        # Use ML classifier if available
-        if hasattr(self, 'ml_classifier') and self.ml_classifier is not None:
+        # Use ML bubble classifier if available (now that coordinates are fixed)
+        if self.bubble_classifier is not None:
             try:
-                is_filled, confidence = self.ml_classifier.predict(bubble)
+                is_filled, confidence = self.bubble_classifier.predict(bubble)
                 return is_filled
             except:
                 pass  # Fall back to threshold if ML fails
 
-        # Fallback: simple threshold (if ML not available)
+        # Fallback: threshold-based detection
         very_dark_pixels = np.sum(bubble < 50)
         return very_dark_pixels > 200
 
@@ -1473,19 +1473,17 @@ class YOLOOMRProcessor:
                 # IMPORTANT: row_positions[0] is the LABEL ROW (A B C D markers), not Q1
                 # Q1 is at row_positions[1], Q2 at row_positions[2], etc.
                 # So use q_idx + 1 to skip the label row
+                # row_positions already contains TOP-LEFT Y coordinates
                 y = row_positions[q_idx + 1]
-
-                # Adjust to center the sampling box on the bubble
-                # Coordinates are for top-left, but we need to center on bubble
-                y = y + self.ANSWER_BUBBLE_SIZE[1] // 2
 
                 found_answer = ''
 
                 # Check options A, B, C, D
                 for opt_idx, option in enumerate(self.ANSWER_VALUES):
+                    # block_x is CENTER X of option A, calculate center X for this option
                     x = block_x + opt_idx * self.ANSWER_OPTION_GAP
 
-                    # Adjust X to center horizontally
+                    # Convert from center X to top-left X for _is_bubble_filled_simple
                     x = x - self.ANSWER_BUBBLE_SIZE[0] // 2
 
                     if self._is_bubble_filled_simple(gray, x, y, self.ANSWER_BUBBLE_SIZE):
