@@ -98,65 +98,120 @@ class YOLOOMRProcessor:
     TARGET_HEIGHT = 3507
 
     # Grid definitions for Vidya Bharti 2025 OMR sheet
-    # Calibrated from actual scanned images (41_624.jpg)
-    # Origin coordinates point to top-left of first bubble in each field
-    FIELD_CONFIGS = {
-        'name': {
-            # Calibrated 2024-12-29 using circle detection on name bubble grid
-            # The name bubble grid is on the left side of the form
-            # Each column represents one letter position, rows A-Z for letters
-            # Origin is top-left of first bubble (row A, col 0)
-            # Calibrated 2025-12-31: Fine-tuned to align perfectly with bubble grid
-            # Default origin - will be adjusted per-image based on batch detection
-            'origin': (185, 686),  # Khoj batch (final calibration: right 13px, up 17px)
-            'origin_chayan': (180, 680),  # Chayan batch - calibrated 2026-01-01: 30px up from original (710→680)
-            'bubble_size': (33, 33),
-            'rows_gap': 52,  # Vertical distance between A,B,C... rows
-            'cols_gap': 54,  # Horizontal distance between letter columns
-            'rows': 26,  # A-Z
-            'cols': 25,  # Max name length
-            'values': list('ABCDEFGHIJKLMNOPQRSTUVWXYZ'),
-            'direction': 'vertical'
-        },
+    # ORIGINAL coordinates measured on 1662x2320 image using pixspy
+    # These are scaled dynamically based on each image's actual dimensions
+    # using: scaled_coord = original_coord * (TARGET_SIZE / original_image_size)
+    FIELD_CONFIGS_ORIGINAL = {
+        # Original pixspy coordinates measured on 1662x2320 image (41_625.jpg)
+        # User provided: roll(1067,857), class(1212,857), school(1424,857)
+        # Adjusted: X-10, Y-10 + width-based X offset for narrower images
         'roll_number': {
-            # Calibrated from actual filled bubbles: col0=1600, col1≈1660, col2≈1720
-            'origin': (1600, 1278),
-            'bubble_size': (28, 28),
-            'rows_gap': 54,
-            'cols_gap': 60,  # Average gap ~60px
-            'rows': 10,  # 0-9
+            'origin': (1057, 847),  # Adjusted from (1067, 857)
+            'bubble_size': (19, 19),
+            'rows_gap': 35,
+            'cols_gap': 44,
+            'rows': 10,
             'cols': 3,
             'values': list('0123456789'),
             'direction': 'vertical'
         },
         'class': {
-            # Calibrated from actual filled bubbles: class '3' at x=1820, row 0
-            'origin': (1820, 1278),
-            'bubble_size': (28, 28),
-            'rows_gap': 54,
-            'cols_gap': 56,
+            'origin': (1202, 847),  # Adjusted from (1212, 857)
+            'bubble_size': (19, 19),
+            'rows_gap': 35,
+            'cols_gap': 40,
             'rows': 8,
             'cols': 1,
             'values': ['3', '4', '5', '6', '7', '8', '9', '10'],
             'direction': 'vertical'
         },
         'section': {
-            # Calibrated: x=1960 works across different scan alignments
-            'origin': (1960, 1278),
-            'bubble_size': (28, 28),
-            'rows_gap': 54,
-            'cols_gap': 56,
+            'origin': (1308, 847),  # Adjusted from (1318, 857)
+            'bubble_size': (19, 19),
+            'rows_gap': 35,
+            'cols_gap': 40,
             'rows': 8,
             'cols': 1,
             'values': list('ABCDEFGH'),
             'direction': 'vertical'
         },
         'school_code': {
-            # Calibrated from actual filled bubbles: school '0' at x=2135, row 0
-            'origin': (2135, 1278),
+            'origin': (1414, 847),  # Adjusted from (1424, 857)
+            'bubble_size': (19, 19),
+            'rows_gap': 35,
+            'cols_gap': 41,
+            'rows': 10,
+            'cols': 3,
+            'values': list('0123456789'),
+            'direction': 'vertical'
+        },
+        'name': {
+            # Calibrated from pixspy on 41_625.jpg:
+            # Col0 A center: (129,465), Col24 A center: (990,470)
+            # Col0 Z center: (129,1315), Col24 Z center: (989,1316)
+            'origin': (128, 454),  # Moved right by 10px for better alignment
+            'bubble_size': (22, 22),
+            'rows_gap': 34,  # (1315-465)/25 = 34
+            'cols_gap': 36,  # (990-129)/24 = 35.875 ≈ 36
+            'x_shift_per_row': 0,  # No shift - bubbles are vertically straight
+            'y_drift_per_col': 0.0,  # Set to 0 to fix col24 Z alignment
+            'x_drift_per_col': 0.3,  # Compensate for leftward drift across columns
+            'y_drift_per_row': 0.3,  # Small compensation for upward drift across rows
+            'rows': 26,
+            'cols': 25,
+            'values': list('ABCDEFGHIJKLMNOPQRSTUVWXYZ'),
+            'direction': 'vertical'
+        }
+    }
+    # Pre-scaled configs (for backward compatibility with non-dynamic code)
+    FIELD_CONFIGS = {
+        'name': {
+            'origin': (243, 690),
+            'origin_chayan': (243, 690),
+            'bubble_size': (33, 33),
+            'rows_gap': 51,
+            'cols_gap': 52,
+            'x_shift_per_row': -3.56,
+            'rows': 26,
+            'cols': 25,
+            'values': list('ABCDEFGHIJKLMNOPQRSTUVWXYZ'),
+            'direction': 'vertical'
+        },
+        'roll_number': {
+            'origin': (1640, 1289),
             'bubble_size': (28, 28),
-            'rows_gap': 54,
-            'cols_gap': 56,
+            'rows_gap': 53,
+            'cols_gap': 66,
+            'rows': 10,
+            'cols': 3,
+            'values': list('0123456789'),
+            'direction': 'vertical'
+        },
+        'class': {
+            'origin': (1790, 1289),
+            'bubble_size': (28, 28),
+            'rows_gap': 53,
+            'cols_gap': 60,
+            'rows': 8,
+            'cols': 1,
+            'values': ['3', '4', '5', '6', '7', '8', '9', '10'],
+            'direction': 'vertical'
+        },
+        'section': {
+            'origin': (1951, 1289),
+            'bubble_size': (28, 28),
+            'rows_gap': 53,
+            'cols_gap': 60,
+            'rows': 8,
+            'cols': 1,
+            'values': list('ABCDEFGH'),
+            'direction': 'vertical'
+        },
+        'school_code': {
+            'origin': (2112, 1289),
+            'bubble_size': (28, 28),
+            'rows_gap': 53,
+            'cols_gap': 62,
             'rows': 10,
             'cols': 3,
             'values': list('0123456789'),
@@ -167,15 +222,34 @@ class YOLOOMRProcessor:
     # Answer blocks configuration
     # Answer section: 6 blocks, each with 10 questions arranged VERTICALLY
     # Options A,B,C,D go HORIZONTALLY within each question
-    # Calibrated 2026-01-01 from actual filled bubble positions
-    # Default origins for Khoj batch - block gap is 346px (not 360)
+    #
+    # ORIGINAL coordinates measured on 1662x2320 image (41_625.jpg) using pixspy:
+    # Q1 Option A: (186, 1459), Q10 Option A: (186, 2006)
+    # Q11 Option A: (425, 1459), Q51 Option A: (1380, 1461)
+    # Row gap: (2006 - 1459) / 9 = 60.78 ≈ 61 pixels
+    # Block spacing: 425 - 186 = 239 pixels
+    ANSWER_BLOCKS_ORIGINAL = {
+        'blocks': [
+            {'origin': (171, 1449), 'questions': range(1, 11)},    # Block 1: Q1-10 (y+20)
+            {'origin': (410, 1449), 'questions': range(11, 21)},   # Block 2: Q11-20 (+239)
+            {'origin': (649, 1449), 'questions': range(21, 31)},   # Block 3: Q21-30 (+239)
+            {'origin': (888, 1449), 'questions': range(31, 41)},   # Block 4: Q31-40 (+239)
+            {'origin': (1127, 1449), 'questions': range(41, 51)},  # Block 5: Q41-50 (+239)
+            {'origin': (1365, 1451), 'questions': range(51, 61)},  # Block 6: Q51-60 (y+20)
+        ],
+        'row_gap': 61,       # (2006 - 1459) / 9 = 60.78
+        'option_gap': 43,    # Horizontal gap between A,B,C,D (estimated from pixspy)
+        'bubble_size': (19, 19),  # Same as other fields on original image
+    }
+
+    # Pre-scaled answer blocks (legacy, kept for reference)
     ANSWER_BLOCKS = [
-        {'origin': (326, 2111), 'questions': range(1, 11)},    # Block 1: Q1-10
-        {'origin': (672, 2111), 'questions': range(11, 21)},   # Block 2: Q11-20 (+346)
-        {'origin': (1018, 2111), 'questions': range(21, 31)},  # Block 3: Q21-30 (+346)
-        {'origin': (1364, 2111), 'questions': range(31, 41)},  # Block 4: Q31-40 (+346)
-        {'origin': (1710, 2111), 'questions': range(41, 51)},  # Block 5: Q41-50 (+346)
-        {'origin': (2056, 2111), 'questions': range(51, 61)},  # Block 6: Q51-60 (+346)
+        {'origin': (261, 2111), 'questions': range(1, 11)},    # Block 1: Q1-10
+        {'origin': (607, 2111), 'questions': range(11, 21)},   # Block 2: Q11-20 (+346)
+        {'origin': (953, 2111), 'questions': range(21, 31)},   # Block 3: Q21-30 (+346)
+        {'origin': (1299, 2111), 'questions': range(31, 41)},  # Block 4: Q31-40 (+346)
+        {'origin': (1645, 2111), 'questions': range(41, 51)},  # Block 5: Q41-50 (+346)
+        {'origin': (1991, 2111), 'questions': range(51, 61)},  # Block 6: Q51-60 (+346)
     ]
     # Chayan batch (39_*.jpg) has different alignment
     ANSWER_BLOCKS_CHAYAN = [
@@ -251,6 +325,11 @@ class YOLOOMRProcessor:
         self.bubble_classifier = None
         self.answer_classifier = None
         self.answer_classifier_device = None
+
+        # Create instance copy of FIELD_CONFIGS to avoid cross-instance contamination
+        # when calibration updates the config values
+        import copy
+        self.field_configs = copy.deepcopy(self.FIELD_CONFIGS)
 
         if model_path and Path(model_path).exists():
             self._load_model(model_path)
@@ -385,41 +464,34 @@ class YOLOOMRProcessor:
             # Auto-detect batch type by form color (Blue=Chayan, Red=Khoj)
             self._is_chayan_batch = self._detect_best_origin(aligned)
 
-            # Auto-detect form year (2023-24 vs 2025-26) based on header position
-            self._is_2023_form = self._detect_form_year(aligned)
+            # Default to 2025-26 form layout
+            # The form year detection was unreliable - auto-calibration handles variations
+            # TODO: Implement more reliable form year detection if needed
+            self._is_2023_form = False
 
             if self._is_chayan_batch:
                 # Chayan batch - use adjusted origins
-                self.FIELD_CONFIGS['name']['origin'] = self.FIELD_CONFIGS['name'].get('origin_chayan', (180, 710))
+                self.field_configs['name']['origin'] = self.field_configs['name'].get('origin_chayan', (180, 710))
                 self._current_answer_blocks = self.ANSWER_BLOCKS_CHAYAN
                 self._current_answer_row_positions = self.ANSWER_ROW_POSITIONS_CHAYAN
             elif self._is_2023_form:
                 # 2023-24 form (Khoj batch) - different grid position
                 # After marker alignment, adjusted for 2023-24 layout
-                self.FIELD_CONFIGS['name']['origin'] = (220, 610)  # Calibrated for 2023-24 forms
-                self.FIELD_CONFIGS['name']['rows_gap'] = 54
-                self.FIELD_CONFIGS['name']['cols_gap'] = 54
+                self.field_configs['name']['origin'] = (220, 610)  # Calibrated for 2023-24 forms
+                self.field_configs['name']['rows_gap'] = 54
+                self.field_configs['name']['cols_gap'] = 54
                 # Calibrated origins for 2023-24 forms
-                self.FIELD_CONFIGS['roll_number']['origin'] = (1600, 1250)
-                self.FIELD_CONFIGS['class']['origin'] = (1810, 1250)
-                self.FIELD_CONFIGS['section']['origin'] = (1960, 1250)
-                self.FIELD_CONFIGS['school_code']['origin'] = (2120, 1250)
+                self.field_configs['roll_number']['origin'] = (1600, 1250)
+                self.field_configs['class']['origin'] = (1810, 1250)
+                self.field_configs['section']['origin'] = (1960, 1250)
+                self.field_configs['school_code']['origin'] = (2120, 1250)
                 self._current_answer_blocks = self.ANSWER_BLOCKS
                 self._current_answer_row_positions = self.ANSWER_ROW_POSITIONS
             else:
-                # Default 2025-26 Khoj batch - reset all name config to defaults
-                # After marker-based perspective alignment, TL marker is at (170, 530)
-                # Name grid is at fixed offset: X+15, Y+136 from TL marker
-                self.FIELD_CONFIGS['name']['origin'] = (185, 666)  # (170+15, 530+136)
-                self.FIELD_CONFIGS['name']['rows_gap'] = 52  # Reset to default
-                self.FIELD_CONFIGS['name']['cols_gap'] = 54  # Reset to default
-                # Reset other fields to 2025-26 defaults
-                # All Y coordinates adjusted -20px for marker alignment (same as name field)
-                # X coordinates calibrated from bubble detection diagnostic
-                self.FIELD_CONFIGS['roll_number']['origin'] = (1580, 1258)  # X calibrated -20px
-                self.FIELD_CONFIGS['class']['origin'] = (1775, 1250)  # Calibrated X position
-                self.FIELD_CONFIGS['section']['origin'] = (1925, 1250)  # Calibrated X position
-                self.FIELD_CONFIGS['school_code']['origin'] = (2075, 1250)  # Calibrated X position
+                # Default 2025-26 Khoj batch - use FIELD_CONFIGS defaults
+                # The defaults are calibrated from 41_626.jpg which works correctly:
+                # name origin: (243, 690), roll: (1600, 1278), etc.
+                # Don't overwrite - just use the values already set from FIELD_CONFIGS
                 self._current_answer_blocks = self.ANSWER_BLOCKS
                 self._current_answer_row_positions = self.ANSWER_ROW_POSITIONS
 
@@ -673,10 +745,24 @@ class YOLOOMRProcessor:
         These markers are used for perspective correction to align all sheets
         to a consistent reference frame, regardless of scan quality or year.
 
+        Uses expected corner positions to filter candidates and avoid picking
+        wrong dark regions on the form.
+
         Returns:
             4x2 numpy array of corner coordinates [TL, TR, BL, BR], or None if not found
         """
         h, w = gray.shape
+
+        # Expected corner positions (approximate, allow tolerance)
+        # These are the expected marker positions before alignment
+        EXPECTED_CORNERS = {
+            'tl': (170, 530),     # Top-left
+            'tr': (w - 170, 530), # Top-right
+            'bl': (170, 3150),    # Bottom-left
+            'br': (w - 170, 3150) # Bottom-right
+        }
+        # Maximum distance from expected position to accept a candidate
+        MAX_DISTANCE = 200
 
         # Threshold to find dark regions (markers are solid black)
         _, thresh = cv2.threshold(gray, 60, 255, cv2.THRESH_BINARY_INV)
@@ -701,22 +787,50 @@ class YOLOOMRProcessor:
         if len(candidates) < 4:
             return None
 
-        # Find corners by quadrant
-        mid_x, mid_y = w // 2, h // 2
+        def find_best_corner(corner_name, expected_pos, candidates):
+            """Find the best candidate for a corner, preferring ones close to expected position."""
+            exp_x, exp_y = expected_pos
+            # Filter to candidates within MAX_DISTANCE of expected position
+            nearby = []
+            for c in candidates:
+                dist = np.sqrt((c[0] - exp_x)**2 + (c[1] - exp_y)**2)
+                if dist < MAX_DISTANCE:
+                    nearby.append((c, dist))
 
-        tl_candidates = [c for c in candidates if c[0] < mid_x and c[1] < mid_y]
-        tr_candidates = [c for c in candidates if c[0] > mid_x and c[1] < mid_y]
-        bl_candidates = [c for c in candidates if c[0] < mid_x and c[1] > mid_y]
-        br_candidates = [c for c in candidates if c[0] > mid_x and c[1] > mid_y]
+            if not nearby:
+                # Fallback: use all candidates in the correct quadrant
+                return None
 
-        if not all([tl_candidates, tr_candidates, bl_candidates, br_candidates]):
-            return None
+            # Sort by distance to expected position
+            nearby.sort(key=lambda x: x[1])
+            return nearby[0][0]  # Return best candidate
 
-        # Select the corner marker from each quadrant
-        tl = min(tl_candidates, key=lambda c: c[0] + c[1])
-        tr = max(tr_candidates, key=lambda c: c[0] - c[1])
-        bl = min(bl_candidates, key=lambda c: c[0] - c[1])
-        br = max(br_candidates, key=lambda c: c[0] + c[1])
+        # Find corners using expected positions
+        tl = find_best_corner('tl', EXPECTED_CORNERS['tl'], candidates)
+        tr = find_best_corner('tr', EXPECTED_CORNERS['tr'], candidates)
+        bl = find_best_corner('bl', EXPECTED_CORNERS['bl'], candidates)
+        br = find_best_corner('br', EXPECTED_CORNERS['br'], candidates)
+
+        # Fallback to quadrant-based selection if expected position matching fails
+        if not all([tl, tr, bl, br]):
+            mid_x, mid_y = w // 2, h // 2
+
+            tl_candidates = [c for c in candidates if c[0] < mid_x and c[1] < mid_y]
+            tr_candidates = [c for c in candidates if c[0] > mid_x and c[1] < mid_y]
+            bl_candidates = [c for c in candidates if c[0] < mid_x and c[1] > mid_y]
+            br_candidates = [c for c in candidates if c[0] > mid_x and c[1] > mid_y]
+
+            if not all([tl_candidates, tr_candidates, bl_candidates, br_candidates]):
+                return None
+
+            if tl is None:
+                tl = min(tl_candidates, key=lambda c: c[0] + c[1])
+            if tr is None:
+                tr = max(tr_candidates, key=lambda c: c[0] - c[1])
+            if bl is None:
+                bl = min(bl_candidates, key=lambda c: c[0] - c[1])
+            if br is None:
+                br = max(br_candidates, key=lambda c: c[0] + c[1])
 
         return np.float32([
             [tl[0], tl[1]],  # Top-left
@@ -726,53 +840,23 @@ class YOLOOMRProcessor:
         ])
 
     def _align_image(self, image: np.ndarray) -> np.ndarray:
-        """Align image using corner marker detection and perspective transform.
+        """Align image using simple resize.
 
-        This ensures consistent grid positions across all sheets regardless of
-        scan quality, rotation, or form year.
+        Stores original dimensions for offset calculation.
         """
         h, w = image.shape[:2]
 
-        # First resize to target dimensions
+        # Store original size for offset calculation
+        self._original_size = (w, h)
+
+        # Simple resize to target dimensions
         if w == self.TARGET_WIDTH and h == self.TARGET_HEIGHT:
             resized = image
         else:
             resized = cv2.resize(image, (self.TARGET_WIDTH, self.TARGET_HEIGHT))
 
-        # Convert to grayscale for marker detection
-        if len(resized.shape) == 3:
-            gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = resized
-
-        # Find corner markers
-        corners = self._find_corner_markers(gray)
-
-        if corners is None:
-            # Fallback to simple resize if markers not found
-            self._markers_aligned = False
-            return resized
-
-        self._markers_aligned = True
-
-        # Define ideal corner positions (normalized reference frame)
-        # All sheets will be transformed to have markers at these positions
-        MARKER_MARGIN_X = 170   # X position of left markers
-        MARKER_TOP_Y = 530      # Y position of top markers
-        MARKER_BOTTOM_Y = 3150  # Y position of bottom markers
-
-        ideal_corners = np.float32([
-            [MARKER_MARGIN_X, MARKER_TOP_Y],                           # Top-left
-            [self.TARGET_WIDTH - MARKER_MARGIN_X, MARKER_TOP_Y],       # Top-right
-            [MARKER_MARGIN_X, MARKER_BOTTOM_Y],                        # Bottom-left
-            [self.TARGET_WIDTH - MARKER_MARGIN_X, MARKER_BOTTOM_Y],    # Bottom-right
-        ])
-
-        # Calculate and apply perspective transform
-        M = cv2.getPerspectiveTransform(corners, ideal_corners)
-        aligned = cv2.warpPerspective(resized, M, (self.TARGET_WIDTH, self.TARGET_HEIGHT))
-
-        return aligned
+        self._markers_aligned = False
+        return resized
 
     def _normalize_image(self, image: np.ndarray) -> np.ndarray:
         """Normalize image brightness/contrast for consistent bubble detection.
@@ -849,6 +933,123 @@ class YOLOOMRProcessor:
 
         except Exception:
             return None
+
+    def _calibrate_name_grid(self, gray: np.ndarray) -> dict:
+        """Auto-calibrate name grid parameters using circle detection.
+
+        Returns dict with: origin, rows_gap, cols_gap, x_shift_per_row
+        Returns None if calibration fails.
+
+        This function tries multiple detection thresholds to handle varying
+        image quality/contrast across different scans.
+        """
+        # Use HoughCircles to detect bubbles in the name region
+        roi_x1, roi_y1 = 130, 600
+        roi_x2, roi_y2 = 900, 2100
+
+        if roi_y2 > gray.shape[0] or roi_x2 > gray.shape[1]:
+            return None
+
+        roi = gray[roi_y1:roi_y2, roi_x1:roi_x2]
+
+        # Try multiple param2 thresholds from strict to lenient
+        # Different scans have different contrast levels
+        for param2 in [30, 25, 20, 15]:
+            circles = cv2.HoughCircles(
+                roi, cv2.HOUGH_GRADIENT, dp=1, minDist=30,
+                param1=50, param2=param2, minRadius=10, maxRadius=20
+            )
+
+            if circles is None or len(circles[0]) < 50:
+                continue
+
+            # Convert to absolute coordinates
+            all_circles = []
+            for circle in circles[0]:
+                x, y, r = circle
+                all_circles.append((int(x + roi_x1), int(y + roi_y1), int(r)))
+
+            # Sort by Y to find rows
+            sorted_by_y = sorted(all_circles, key=lambda c: c[1])
+
+            # Group into rows (circles with similar Y values)
+            rows = []
+            current_row = [sorted_by_y[0]]
+            for circle in sorted_by_y[1:]:
+                if abs(circle[1] - current_row[-1][1]) < 25:
+                    current_row.append(circle)
+                else:
+                    # Filter out rows with too many circles (noise detection)
+                    # Name grid has max ~12-15 circles per row
+                    if 5 <= len(current_row) <= 20:
+                        rows.append(sorted(current_row, key=lambda c: c[0]))
+                    current_row = [circle]
+            if 5 <= len(current_row) <= 20:
+                rows.append(sorted(current_row, key=lambda c: c[0]))
+
+            if len(rows) < 5:
+                continue
+
+            # Calculate row spacing (Y gap)
+            row_y_positions = [np.mean([c[1] for c in row]) for row in rows]
+            row_gaps = [row_y_positions[i+1] - row_y_positions[i] for i in range(len(row_y_positions)-1)]
+            avg_row_gap = int(np.median(row_gaps))
+
+            # Validate row gap is reasonable (should be ~50-55 pixels)
+            if not (40 <= avg_row_gap <= 65):
+                continue
+
+            # Calculate column spacing (X gap) from a consistent row
+            # Find a row with typical number of circles (10-13)
+            good_row = None
+            for row in rows:
+                if 8 <= len(row) <= 15:
+                    good_row = row
+                    break
+            if good_row is None:
+                good_row = rows[0]
+
+            if len(good_row) < 3:
+                continue
+            col_gaps = [good_row[i+1][0] - good_row[i][0] for i in range(len(good_row)-1)]
+            avg_col_gap = int(np.median(col_gaps))
+
+            # Validate col gap is reasonable (should be ~50-55 pixels)
+            if not (40 <= avg_col_gap <= 65):
+                continue
+
+            # Calculate grid skew angle (how much X shifts per row)
+            first_col_x = [row[0][0] for row in rows[:min(10, len(rows))]]
+
+            if len(first_col_x) >= 2:
+                x_shift_per_row = (first_col_x[-1] - first_col_x[0]) / (len(first_col_x) - 1)
+            else:
+                x_shift_per_row = 0
+
+            # Find origin (first bubble of first row)
+            origin_x = rows[0][0][0]
+            origin_y = rows[0][0][1]
+
+            # Validate origin is in expected range for name grid
+            # Based on working image 41_626.jpg: origin=(243, 690)
+            # Name grid origin should be roughly at X: 220-280, Y: 670-720
+            if not (220 <= origin_x <= 280 and 670 <= origin_y <= 720):
+                continue
+
+            # Validate x_shift is in expected range (grid skews left, so negative)
+            # Should be between -8 and +2 typically
+            if not (-10 <= x_shift_per_row <= 3):
+                continue
+
+            return {
+                'origin': (origin_x, origin_y),
+                'rows_gap': avg_row_gap,
+                'cols_gap': avg_col_gap,
+                'x_shift_per_row': x_shift_per_row
+            }
+
+        # All thresholds failed
+        return None
 
     def _detect_name_grid_origin(self, gray: np.ndarray) -> tuple:
         """Auto-detect the name grid origin by finding bubble positions."""
@@ -934,6 +1135,18 @@ class YOLOOMRProcessor:
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         else:
             gray = image
+
+        # Auto-calibrate name grid parameters per image using circle detection
+        # This handles varying alignment/skew between different scanned images
+        name_calib = self._calibrate_name_grid(gray)
+        if name_calib:
+            self.field_configs['name']['origin'] = name_calib['origin']
+            self.field_configs['name']['rows_gap'] = name_calib['rows_gap']
+            self.field_configs['name']['cols_gap'] = name_calib['cols_gap']
+            self.field_configs['name']['x_shift_per_row'] = name_calib['x_shift_per_row']
+            import sys
+            print(f"[DEBUG] Name grid auto-calibrated: origin={name_calib['origin']}, "
+                  f"x_shift={name_calib['x_shift_per_row']:.2f}", file=sys.stderr)
 
         # Extract all fields using pure ML detection (if available) or threshold fallback
         # Pure ML is more consistent and handles edge cases better
@@ -1183,29 +1396,32 @@ class YOLOOMRProcessor:
         gray = cv2.cvtColor(aligned_bgr, cv2.COLOR_BGR2GRAY)
 
         # Test both origins
-        # After marker-based alignment, TL marker is at (170, 530)
+        # 2025-26: Calibrated from circle detection (2026-01-02)
+        # 2023-24: Legacy coordinates
         origins_to_test = [
-            ('2025-26', 185, 666, 52),  # origin_x, origin_y, rows_gap (170+15, 530+136)
-            ('2023-24', 220, 610, 54),  # Adjusted for 2023-24 layout
+            ('2025-26', 243, 690, 51, -3.56),  # origin_x, origin_y, rows_gap, x_shift_per_row
+            ('2023-24', 220, 610, 54, 0),       # Legacy layout (no skew)
         ]
 
         bubble_size = (33, 33)
-        cols_gap = 54
+        cols_gap = 52  # Updated from calibration
         bw, bh = bubble_size
 
         best_version = '2025-26'
         best_score = 0
 
-        for version, origin_x, origin_y, rows_gap in origins_to_test:
+        for version, origin_x, origin_y, rows_gap, x_shift_per_row in origins_to_test:
             filled_count = 0
             total_gap = 0
 
             # Test first 10 columns
             for col in range(10):
-                x = origin_x + col * cols_gap
+                base_x = origin_x + col * cols_gap
                 bubble_data = []
 
                 for row in range(26):
+                    # Apply skew correction: X shifts as we go down rows
+                    x = int(base_x + row * x_shift_per_row)
                     y = origin_y + row * rows_gap
                     if 0 <= y < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw:
                         bubble = gray[y:y+bh, x:x+bw].copy()
@@ -1553,8 +1769,9 @@ class YOLOOMRProcessor:
     def _detect_field_simple(self, gray: np.ndarray, field_name: str) -> str:
         """Unified detection for any field using row-by-row checking.
 
-        Checks each bubble individually in order (A, B, C...) and returns
-        the FIRST filled bubble found.
+        Uses dynamic coordinate scaling based on the actual image dimensions.
+        Coordinates from FIELD_CONFIGS_ORIGINAL are scaled by:
+            scaled_coord = original_coord * (TARGET_SIZE / original_image_size)
 
         Args:
             gray: Grayscale image (must be aligned to TARGET dimensions)
@@ -1563,45 +1780,69 @@ class YOLOOMRProcessor:
         Returns:
             Detected value string
         """
-        config = self.FIELD_CONFIGS.get(field_name)
-        if not config:
-            return ""
+        # Get original config for dynamic scaling
+        orig_config = self.FIELD_CONFIGS_ORIGINAL.get(field_name)
+        if not orig_config:
+            # Fall back to pre-scaled config for name field
+            config = self.field_configs.get(field_name)
+            if not config:
+                return ""
+            origin = config['origin']
+            bubble_size = config['bubble_size']
+            rows_gap = config['rows_gap']
+            cols_gap = config.get('cols_gap', rows_gap)
+        else:
+            # Dynamic scaling based on actual image dimensions
+            REF_WIDTH = 1662  # Reference image width (41_625.jpg)
+            if hasattr(self, '_original_size'):
+                orig_w, orig_h = self._original_size
+                scale_x = self.TARGET_WIDTH / orig_w
+                scale_y = self.TARGET_HEIGHT / orig_h
+                # Width-based X offset: narrower images need positive offset (move right)
+                width_diff = REF_WIDTH - orig_w
+                x_offset = int(width_diff * scale_x * 2.0)  # 2x the scaled difference
+            else:
+                # Default scale for reference image
+                scale_x = self.TARGET_WIDTH / 1662
+                scale_y = self.TARGET_HEIGHT / 2320
+                x_offset = 0
 
-        origin = config['origin']
-        bubble_size = config['bubble_size']
-        rows_gap = config['rows_gap']
-        cols_gap = config.get('cols_gap', rows_gap)
+            # Scale all coordinates with width-based X correction
+            origin = (
+                int(orig_config['origin'][0] * scale_x) + x_offset,
+                int(orig_config['origin'][1] * scale_y)
+            )
+            bubble_size = (
+                int(orig_config['bubble_size'][0] * scale_x),
+                int(orig_config['bubble_size'][1] * scale_y)
+            )
+            rows_gap = int(orig_config['rows_gap'] * scale_y)
+            cols_gap = int(orig_config.get('cols_gap', orig_config['rows_gap']) * scale_x)
+
+        config = orig_config if orig_config else self.field_configs.get(field_name)
         num_rows = config['rows']
         num_cols = config['cols']
         values = config['values']
 
-        # Calibration based on field type
-        y_offset = 0
-        x_offset = 0
-
-        if field_name == 'name':
-            # Both batch origins are pre-calibrated for aligned images
-            # Skip calibration to avoid overshoot
-            y_offset = 0
-            x_offset = 0
-        elif field_name in ('class', 'section', 'roll_number', 'school_code'):
-            # Other fields: X-offset search to handle scan alignment variance
-            x_offset = self._find_best_x_offset(gray, origin, bubble_size, rows_gap, num_rows, values)
+        # Get Y drift per column (compensates for grid skew in name field)
+        y_drift_per_col = config.get('y_drift_per_col', 0)
 
         result = []
 
         for col in range(num_cols):
-            # Calculate X position with grid spacing irregularities
-            x = origin[0] + col * cols_gap + x_offset
+            # Calculate X position
+            x = origin[0] + col * cols_gap
 
             # For name field: add extra spacing after column 10
             if field_name == 'name' and col > 10:
                 x += 54
 
-            # Compare ALL bubbles in this column to find the most filled one
-            bubble_data = []
+            # Check ALL bubbles in this column
+            all_bubbles = []
+            filled_bubbles = []
             for row in range(num_rows):
-                y = origin[1] + y_offset + row * rows_gap
+                # Apply Y drift per column (grid skew compensation)
+                y = origin[1] + col * y_drift_per_col + row * rows_gap
                 y1, y2 = y, y + bubble_size[1]
                 x1, x2 = x, x + bubble_size[0]
 
@@ -1609,35 +1850,37 @@ class YOLOOMRProcessor:
                     bubble = gray[y1:y2, x1:x2]
                     mean_val = np.mean(bubble)
                     very_dark = np.sum(bubble < 50)
-                    bubble_data.append((row, mean_val, very_dark))
 
-            if not bubble_data:
-                result.append(' ')
-                continue
+                    all_bubbles.append((row, mean_val, very_dark))
 
-            # Sort by very_dark_pixels (descending) then by mean (ascending)
-            # This finds the bubble with most dark pixels (most filled)
-            bubble_data.sort(key=lambda x: (-x[2], x[1]))
-            darkest_row, darkest_mean, darkest_vdark = bubble_data[0]
+                    # Check if this bubble is filled using threshold
+                    is_filled = (
+                        (very_dark > 200 and mean_val < 150) or  # Strong fill
+                        (very_dark > 150 and mean_val < 120) or  # Moderate fill
+                        (very_dark > 300)  # Very strong absolute fill
+                    )
 
-            # Calculate gap from second-darkest
-            if len(bubble_data) > 1:
-                second_vdark = bubble_data[1][2]
-                gap_vdark = darkest_vdark - second_vdark
+                    if is_filled:
+                        filled_bubbles.append((row, mean_val, very_dark))
+
+            if filled_bubbles:
+                # If 2 or more bubbles are filled, pick the FIRST one (lowest row number)
+                filled_bubbles.sort(key=lambda x: x[0])  # Sort by row number ascending
+                first_filled_row = filled_bubbles[0][0]
+                result.append(values[first_filled_row])
+            elif all_bubbles:
+                # Fallback: if no bubble meets threshold, check if one is clearly darker
+                all_bubbles.sort(key=lambda x: -x[2])  # Sort by vdark descending
+                darkest = all_bubbles[0]
+                second = all_bubbles[1] if len(all_bubbles) > 1 else (0, 255, 0)
+
+                # Pick darkest if it has significantly more dark pixels than second
+                if darkest[2] > 50 and darkest[2] > second[2] * 2:
+                    result.append(values[darkest[0]])
+                else:
+                    result.append(' ')
             else:
-                gap_vdark = darkest_vdark
-
-            # Data-driven detection:
-            # From analysis: Filled min=208 vdark, Empty max (95%)=215 vdark
-            # Key: If darkest bubble has significantly more dark pixels than others, it's filled
-            is_filled = (
-                (darkest_vdark > 220 and gap_vdark > 100) or  # Clear winner with strong fill
-                (darkest_vdark > 180 and gap_vdark > 80 and darkest_mean < 150) or  # Strong fill
-                (darkest_vdark > 150 and gap_vdark > 60 and darkest_mean < 130) or  # Moderate fill
-                (darkest_vdark > 300)  # Very strong absolute fill
-            )
-
-            result.append(values[darkest_row] if is_filled else ' ')
+                result.append(' ')
 
         return ''.join(result)
 
@@ -1667,11 +1910,43 @@ class YOLOOMRProcessor:
         # No filled bubble found at any offset, return 0
         return 0
 
-    def _detect_answers_simple(self, gray: np.ndarray) -> Dict[int, str]:
-        """Detect all 60 answers using corridor-based logic.
+    def _find_best_y_offset(self, gray: np.ndarray, origin: Tuple[int, int],
+                             bubble_size: Tuple[int, int], rows_gap: int, cols_gap: int,
+                             num_rows: int, num_cols: int) -> int:
+        """Find the best Y offset for a field by testing offsets and finding filled bubbles.
 
-        Simple loop: for each question (1-60), check options A,B,C,D
-        and return first filled option.
+        Different scans can have vertical shifts. This method tests Y offsets
+        and returns the one where the most bubbles are detected.
+
+        Returns:
+            Best y_offset to apply (can be positive or negative)
+        """
+        y_offsets_to_test = [-100, -80, -60, -40, -20, 0, 20, 40, 60, 80, 100]
+        best_y_offset = 0
+        best_filled_count = 0
+
+        for y_offset in y_offsets_to_test:
+            filled_count = 0
+            for col in range(num_cols):
+                x = origin[0] + col * cols_gap
+                for row in range(num_rows):
+                    y = origin[1] + y_offset + row * rows_gap
+                    if self._is_bubble_filled_simple(gray, x, y, bubble_size):
+                        filled_count += 1
+
+            # We expect num_cols filled bubbles (one per column)
+            # The offset with count closest to num_cols is best
+            if filled_count >= num_cols and filled_count > best_filled_count:
+                best_filled_count = filled_count
+                best_y_offset = y_offset
+
+        return best_y_offset
+
+    def _detect_answers_simple(self, gray: np.ndarray) -> Dict[int, str]:
+        """Detect all 60 answers using dynamically scaled coordinates.
+
+        Uses ANSWER_BLOCKS_ORIGINAL (measured on 1662x2320 reference image)
+        and scales to the actual image dimensions, similar to name field detection.
 
         Args:
             gray: Grayscale image (must be aligned to TARGET dimensions)
@@ -1680,30 +1955,80 @@ class YOLOOMRProcessor:
             Dict mapping question number (1-60) to answer (A/B/C/D or empty string)
         """
         answers = {}
-        answer_blocks = self._current_answer_blocks if hasattr(self, '_current_answer_blocks') else self.ANSWER_BLOCKS
-        row_positions = self._current_answer_row_positions if hasattr(self, '_current_answer_row_positions') else self.ANSWER_ROW_POSITIONS
+
+        # Get original image dimensions for dynamic scaling
+        if not hasattr(self, '_original_size'):
+            # Fallback to old behavior if no original size
+            answer_blocks = self._current_answer_blocks if hasattr(self, '_current_answer_blocks') else self.ANSWER_BLOCKS
+            row_positions = self._current_answer_row_positions if hasattr(self, '_current_answer_row_positions') else self.ANSWER_ROW_POSITIONS
+            option_gap = self.ANSWER_OPTION_GAP
+            bubble_size = self.ANSWER_BUBBLE_SIZE
+        else:
+            # Dynamic scaling from original pixspy coordinates
+            orig_w, orig_h = self._original_size
+            scale_x = self.TARGET_WIDTH / orig_w
+            scale_y = self.TARGET_HEIGHT / orig_h
+
+            # Width-based X offset for narrower images (same as name grid)
+            REF_WIDTH = 1662
+            REF_HEIGHT = 2320
+            width_diff = REF_WIDTH - orig_w
+            height_diff = REF_HEIGHT - orig_h
+            x_offset = int(width_diff * scale_x * 8.0)
+            # Height-based Y offset: shorter images need negative offset (move up)
+            y_offset = int(height_diff * scale_y * -1.5)
+
+            orig_config = self.ANSWER_BLOCKS_ORIGINAL
+            row_gap_orig = orig_config['row_gap']
+            option_gap_orig = orig_config['option_gap']
+            bubble_size_orig = orig_config['bubble_size']
+
+            # Scale values
+            row_gap = int(row_gap_orig * scale_y)
+            option_gap = int(option_gap_orig * scale_x)
+            bubble_size = (
+                int(bubble_size_orig[0] * scale_x),
+                int(bubble_size_orig[1] * scale_y)
+            )
+
+            # Build scaled answer blocks
+            answer_blocks = []
+            for block_orig in orig_config['blocks']:
+                origin_scaled = (
+                    int(block_orig['origin'][0] * scale_x) + x_offset,
+                    int(block_orig['origin'][1] * scale_y) + y_offset
+                )
+                answer_blocks.append({
+                    'origin': origin_scaled,
+                    'questions': block_orig['questions']
+                })
+
+            # Build row positions (Q1 through Q10)
+            # First row is Q1, no label row needed with dynamic approach
+            base_y = int(orig_config['blocks'][0]['origin'][1] * scale_y)
+            row_positions = [base_y + i * row_gap for i in range(10)]
 
         for block in answer_blocks:
             block_x = block['origin'][0]
+            block_y = block['origin'][1] if hasattr(self, '_original_size') else None
 
             for q_idx, q_num in enumerate(block['questions']):
-                # IMPORTANT: row_positions[0] is the LABEL ROW (A B C D markers), not Q1
-                # Q1 is at row_positions[1], Q2 at row_positions[2], etc.
-                # So use q_idx + 1 to skip the label row
-                # row_positions already contains TOP-LEFT Y coordinates
-                y = row_positions[q_idx + 1]
+                # Get Y position for this question
+                if hasattr(self, '_original_size'):
+                    # Dynamic: block_y + q_idx * row_gap
+                    y = block_y + q_idx * row_gap
+                else:
+                    # Legacy: use row_positions array (with label row at index 0)
+                    y = row_positions[q_idx + 1]
 
                 found_answer = ''
 
                 # Check options A, B, C, D
                 for opt_idx, option in enumerate(self.ANSWER_VALUES):
-                    # block_x is CENTER X of option A, calculate center X for this option
-                    x = block_x + opt_idx * self.ANSWER_OPTION_GAP
+                    # block_x is top-left X of option A
+                    x = block_x + opt_idx * option_gap
 
-                    # Convert from center X to top-left X for _is_bubble_filled_simple
-                    x = x - self.ANSWER_BUBBLE_SIZE[0] // 2
-
-                    if self._is_bubble_filled_simple(gray, x, y, self.ANSWER_BUBBLE_SIZE):
+                    if self._is_bubble_filled_simple(gray, x, y, bubble_size):
                         found_answer = option
                         break  # First filled option wins
 
@@ -1728,7 +2053,7 @@ class YOLOOMRProcessor:
         - Low gap (<20): Low confidence (0.5-0.7)
         - Very low gap with dark values: Very low confidence (<0.5)
         """
-        config = self.FIELD_CONFIGS.get(field_name)
+        config = self.field_configs.get(field_name)
         if not config:
             return "", 0.0
 
@@ -1763,6 +2088,9 @@ class YOLOOMRProcessor:
             y_offset = self._calibrate_name_y_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows)
             x_offset_calibrated = self._calibrate_name_x_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows, y_offset)
 
+        # Get skew correction parameter (name grid is skewed)
+        x_shift_per_row = config.get('x_shift_per_row', 0)
+
         for col in range(num_cols):
             # For name field: check all 25 columns (don't stop early)
             # This allows names like "A<spaces>Z" to be detected correctly
@@ -1775,11 +2103,11 @@ class YOLOOMRProcessor:
             best_darkest_val = 255
 
             for x_offset in x_offsets:
-                x = x_base + x_offset
-
                 # Get all bubble values in this column at this offset
                 bubble_values = []
                 for row in range(num_rows):
+                    # Apply skew correction: X shifts as we go down rows
+                    x = int(x_base + x_offset + row * x_shift_per_row)
                     y = origin[1] + y_offset + row * rows_gap  # Apply y_offset for alignment
                     bw, bh = bubble_size
                     if 0 <= y < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw:
@@ -1973,7 +2301,7 @@ class YOLOOMRProcessor:
 
     def _sample_field_hybrid(self, gray: np.ndarray, field_name: str) -> str:
         """Hybrid approach: threshold for clear cases, ML for uncertain ones."""
-        config = self.FIELD_CONFIGS.get(field_name)
+        config = self.field_configs.get(field_name)
         if not config:
             return ""
 
@@ -2001,15 +2329,20 @@ class YOLOOMRProcessor:
             y_offset = self._calibrate_name_y_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows)
             x_offset_calibrated = self._calibrate_name_x_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows, y_offset)
 
+        # Get skew correction parameter (name grid is skewed)
+        x_shift_per_row = config.get('x_shift_per_row', 0)
+
         for col in range(num_cols):
             # For name field: check all 25 columns (don't stop early)
             # This allows names like "A<spaces>Z" to be detected correctly
 
-            x = origin[0] + col * cols_gap + x_offset_calibrated
+            base_x = origin[0] + col * cols_gap + x_offset_calibrated
 
             # Extract all bubbles in this column
             bubbles_data = []
             for row in range(num_rows):
+                # Apply skew correction: X shifts as we go down rows
+                x = int(base_x + row * x_shift_per_row)
                 y = origin[1] + y_offset + row * rows_gap
                 bw, bh = bubble_size
 
@@ -2141,15 +2474,52 @@ class YOLOOMRProcessor:
         return result
 
     def _sample_field_ml(self, gray: np.ndarray, field_name: str) -> str:
-        """Sample a field using ML bubble classifier."""
-        config = self.FIELD_CONFIGS.get(field_name)
-        if not config:
-            return ""
+        """Sample a field using ML bubble classifier.
 
-        origin = config['origin']
-        bubble_size = config['bubble_size']
-        rows_gap = config['rows_gap']
-        cols_gap = config['cols_gap']
+        Uses dynamic coordinate scaling based on the actual image dimensions.
+        Coordinates from FIELD_CONFIGS_ORIGINAL are scaled by:
+            scaled_coord = original_coord * (TARGET_SIZE / original_image_size)
+        """
+        # Get original config for dynamic scaling
+        orig_config = self.FIELD_CONFIGS_ORIGINAL.get(field_name)
+        if not orig_config:
+            # Fall back to pre-scaled config
+            config = self.field_configs.get(field_name)
+            if not config:
+                return ""
+            origin = config['origin']
+            bubble_size = config['bubble_size']
+            rows_gap = config['rows_gap']
+            cols_gap = config['cols_gap']
+        else:
+            # Dynamic scaling based on actual image dimensions
+            REF_WIDTH = 1662  # Reference image width (41_625.jpg)
+            if hasattr(self, '_original_size'):
+                orig_w, orig_h = self._original_size
+                scale_x = self.TARGET_WIDTH / orig_w
+                scale_y = self.TARGET_HEIGHT / orig_h
+                # Width-based X offset: narrower images need positive offset (move right)
+                width_diff = REF_WIDTH - orig_w
+                x_offset = int(width_diff * scale_x * 2.0)  # 2x the scaled difference
+            else:
+                # Default scale for reference image
+                scale_x = self.TARGET_WIDTH / 1662
+                scale_y = self.TARGET_HEIGHT / 2320
+                x_offset = 0
+
+            # Scale all coordinates with width-based X correction
+            origin = (
+                int(orig_config['origin'][0] * scale_x) + x_offset,
+                int(orig_config['origin'][1] * scale_y)
+            )
+            bubble_size = (
+                int(orig_config['bubble_size'][0] * scale_x),
+                int(orig_config['bubble_size'][1] * scale_y)
+            )
+            rows_gap = int(orig_config['rows_gap'] * scale_y)
+            cols_gap = int(orig_config.get('cols_gap', orig_config['rows_gap']) * scale_x)
+
+        config = orig_config if orig_config else self.field_configs.get(field_name)
         num_rows = config['rows']
         num_cols = config['cols']
         values = config['values']
@@ -2157,18 +2527,33 @@ class YOLOOMRProcessor:
         preserve_spaces = (field_name == 'name')
         result_chars = []
 
+        # Get skew correction parameters (scale them if using dynamic scaling)
+        if orig_config and hasattr(self, '_original_size'):
+            x_shift_per_row = config.get('x_shift_per_row', 0) * scale_x
+            y_drift_per_col = config.get('y_drift_per_col', 0) * scale_y
+            x_drift_per_col = config.get('x_drift_per_col', 0) * scale_x
+            y_drift_per_row = config.get('y_drift_per_row', 0) * scale_y
+        else:
+            x_shift_per_row = config.get('x_shift_per_row', 0)
+            y_drift_per_col = config.get('y_drift_per_col', 0)
+            x_drift_per_col = config.get('x_drift_per_col', 0)
+            y_drift_per_row = config.get('y_drift_per_row', 0)
+
         # Apply Y offset calibration for name field (different scans have different alignment)
         y_offset = 0
         if field_name == 'name':
             y_offset = self._calibrate_name_y_offset(gray, origin, bubble_size, rows_gap, cols_gap, num_rows)
 
         for col in range(num_cols):
-            x = origin[0] + col * cols_gap
+            base_x = origin[0] + col * cols_gap + int(col * x_drift_per_col)
+            col_y_offset = int(col * y_drift_per_col)  # Y drift for this column
 
             # Extract all bubbles in this column
             bubbles = []
             for row in range(num_rows):
-                y = origin[1] + y_offset + row * rows_gap
+                # Apply skew correction: X shifts as we go down rows
+                x = int(base_x + row * x_shift_per_row)
+                y = origin[1] + y_offset + col_y_offset + row * rows_gap + int(row * y_drift_per_row)
                 bw, bh = bubble_size
 
                 if 0 <= y < gray.shape[0] - bh and 0 <= x < gray.shape[1] - bw:
@@ -2196,20 +2581,18 @@ class YOLOOMRProcessor:
                 bubble_scores.append((row, filled_score, darkness))
 
             if bubble_scores:
-                # Find bubbles with high filled score AND reasonable darkness
-                # This prevents picking adjacent bubbles that ML incorrectly classifies as filled
+                # Find bubbles with high filled score (ML confidence > 0.6)
                 filled_candidates = [(r, s, d) for r, s, d in bubble_scores if s > 0.6]
 
                 if filled_candidates:
-                    # Among filled candidates, pick the DARKEST one (most clearly filled)
-                    # This is more reliable than "first row" when ML classifies multiple as filled
-                    best_row, best_score, best_dark = min(filled_candidates, key=lambda x: x[2])
-                else:
-                    best_row, best_score, best_dark = max(bubble_scores, key=lambda x: x[1])
-
-                # Only mark as filled if score is high enough
-                if best_score > 0.6 and best_row < len(values):
-                    result_chars.append(values[best_row])
+                    # Always pick FIRST filled bubble (lowest row number)
+                    # No fallback to darkest - first filled only
+                    filled_candidates.sort(key=lambda x: x[0])  # Sort by row ascending
+                    best_row = filled_candidates[0][0]
+                    if best_row < len(values):
+                        result_chars.append(values[best_row])
+                    elif preserve_spaces:
+                        result_chars.append(' ')
                 elif preserve_spaces:
                     result_chars.append(' ')
             elif preserve_spaces:
@@ -2224,7 +2607,7 @@ class YOLOOMRProcessor:
 
     def _sample_field_threshold(self, gray: np.ndarray, field_name: str) -> str:
         """Sample a field using threshold-based detection (fallback)."""
-        config = self.FIELD_CONFIGS.get(field_name)
+        config = self.field_configs.get(field_name)
         if not config:
             return ""
 
@@ -2240,13 +2623,18 @@ class YOLOOMRProcessor:
         preserve_spaces = (field_name == 'name')
         result_chars = []
 
+        # Get skew correction parameter (name grid is skewed)
+        x_shift_per_row = config.get('x_shift_per_row', 0)
+
         # For each column, find the darkest (filled) bubble
         for col in range(num_cols):
-            x = origin[0] + col * cols_gap
+            base_x = origin[0] + col * cols_gap
 
             # Get all bubble values in this column
             bubble_values = []
             for row in range(num_rows):
+                # Apply skew correction: X shifts as we go down rows
+                x = int(base_x + row * x_shift_per_row)
                 y = origin[1] + row * rows_gap
 
                 # Extract bubble region
@@ -2302,6 +2690,12 @@ class YOLOOMRProcessor:
                     elif darkness < 150:
                         is_bubble_filled = True
                     elif bubble_gap_to_median > 3 and darkness < median_val * 0.85:
+                        is_bubble_filled = True
+                    # Additional fallback for very light fills (common in roll_number)
+                    # If the bubble is clearly darker than median even if absolute value is high
+                    elif bubble_gap_to_median > 8 and darkness < 238:
+                        is_bubble_filled = True
+                    elif bubble_gap_to_median > 12 and darkness < 242:
                         is_bubble_filled = True
 
                 # For name field, more lenient for light fills
@@ -2751,7 +3145,7 @@ class YOLOOMRProcessor:
         result = OMRResult(success=True)
 
         # Process each field using FIELD_CONFIGS
-        for field_name, config in self.FIELD_CONFIGS.items():
+        for field_name, config in self.field_configs.items():
             origin = config['origin']
             values = config['values']
             num_cols = config['cols']
