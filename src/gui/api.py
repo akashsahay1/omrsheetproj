@@ -179,21 +179,24 @@ class OMRApi:
     # === Answer Key Operations ===
 
     def load_answer_key(self, file_path: str) -> Dict[str, Any]:
-        """Load answer key from file"""
+        """Load answer key from file and auto-save to settings"""
         try:
             self._answer_key = AnswerKey.from_file(file_path)
             self._scorer.set_answer_key(self._answer_key)
             self._batch_processor.set_answer_key(self._answer_key)
 
             self._settings.last_answer_key_path = file_path
-            self._settings.save()
+
+            # Auto-save the answer key content (not just the path)
+            self._settings.save_answer_key(self._answer_key)
 
             return {
                 'success': True,
                 'path': file_path,
                 'filled_count': self._answer_key.get_filled_count(),
                 'is_complete': self._answer_key.is_complete(),
-                'answers': self._answer_key.answers
+                'answers': self._answer_key.answers,
+                'name': getattr(self._answer_key, 'name', '')
             }
 
         except Exception as e:
@@ -201,7 +204,7 @@ class OMRApi:
             return {'success': False, 'message': str(e)}
 
     def set_manual_answer_key(self, answers: Dict[str, str]) -> Dict[str, Any]:
-        """Set answer key from manual input"""
+        """Set answer key from manual input and auto-save"""
         try:
             self._answer_key = AnswerKey()
 
@@ -211,6 +214,10 @@ class OMRApi:
 
             self._scorer.set_answer_key(self._answer_key)
             self._batch_processor.set_answer_key(self._answer_key)
+
+            # Auto-save the manually entered answer key
+            self._answer_key.name = "Manual Entry"
+            self._settings.save_answer_key(self._answer_key)
 
             return {
                 'success': True,
@@ -231,8 +238,47 @@ class OMRApi:
             'success': True,
             'answers': self._answer_key.answers,
             'filled_count': self._answer_key.get_filled_count(),
-            'is_complete': self._answer_key.is_complete()
+            'is_complete': self._answer_key.is_complete(),
+            'name': getattr(self._answer_key, 'name', '')
         }
+
+    def load_saved_answer_key(self) -> Dict[str, Any]:
+        """
+        Load answer key that was saved from a previous session.
+
+        This is called on app startup to restore the last used answer key.
+        """
+        try:
+            saved_key = self._settings.get_saved_answer_key()
+
+            if saved_key is None:
+                return {'success': False, 'message': 'No saved answer key found'}
+
+            self._answer_key = saved_key
+            self._scorer.set_answer_key(self._answer_key)
+            self._batch_processor.set_answer_key(self._answer_key)
+
+            return {
+                'success': True,
+                'name': getattr(self._answer_key, 'name', self._settings.saved_answer_key_name),
+                'filled_count': self._answer_key.get_filled_count(),
+                'is_complete': self._answer_key.is_complete(),
+                'answers': self._answer_key.answers
+            }
+
+        except Exception as e:
+            logger.error(f"Load saved answer key error: {e}")
+            return {'success': False, 'message': str(e)}
+
+    def clear_saved_answer_key(self) -> Dict[str, Any]:
+        """Clear the saved answer key from settings."""
+        try:
+            self._settings.clear_saved_answer_key()
+            self._answer_key = None
+            return {'success': True, 'message': 'Saved answer key cleared'}
+        except Exception as e:
+            logger.error(f"Clear answer key error: {e}")
+            return {'success': False, 'message': str(e)}
 
     # === Processing Operations ===
 

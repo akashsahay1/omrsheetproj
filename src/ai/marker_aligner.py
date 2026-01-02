@@ -9,6 +9,9 @@ This removes dependency on scanner positioning and handles:
 - Skew
 - Scale differences
 - Translation
+
+Key improvement: Uses canonical marker positions specific to Vidya Bharti OMR sheets
+so all aligned images have markers at identical positions regardless of original dimensions.
 """
 
 import cv2
@@ -25,6 +28,8 @@ class AlignmentResult:
     corners_detected: int = 0
     confidence: float = 0.0
     error_message: str = ""
+    markers: Optional[np.ndarray] = None  # Detected marker positions
+    original_size: Tuple[int, int] = (0, 0)  # (width, height) of original image
 
 
 class MarkerAligner:
@@ -33,17 +38,30 @@ class MarkerAligner:
 
     The OMR sheet should have distinctive markers (black squares or circles)
     at the corners that can be detected and used for perspective correction.
+
+    After alignment, all images will have markers at CANONICAL_MARKERS positions
+    in a TARGET_WIDTH x TARGET_HEIGHT frame, enabling consistent coordinate-based
+    processing regardless of original image dimensions or scan quality.
     """
 
     # Standard output dimensions (A4 at 300 DPI)
     OUTPUT_WIDTH = 2480
     OUTPUT_HEIGHT = 3507
 
+    # Canonical marker positions in the aligned output
+    # These are where the markers should end up after perspective transform
+    CANONICAL_MARKERS = np.float32([
+        [170, 530],    # Top-left marker center
+        [2310, 530],   # Top-right marker center
+        [170, 3150],   # Bottom-left marker center
+        [2310, 3150]   # Bottom-right marker center
+    ])
+
     def __init__(
         self,
         marker_template_path: Optional[str] = None,
-        min_marker_area: int = 500,
-        max_marker_area: int = 10000
+        min_marker_area: int = 300,
+        max_marker_area: int = 8000
     ):
         """
         Initialize the marker aligner.
@@ -64,12 +82,18 @@ class MarkerAligner:
         """
         Align the OMR sheet image using detected corner markers.
 
+        Uses perspective transform to warp detected markers to CANONICAL_MARKERS
+        positions, ensuring all aligned images have consistent coordinates.
+
         Args:
             image: Input BGR image
 
         Returns:
             AlignmentResult with aligned image if successful
         """
+        h, w = image.shape[:2]
+        original_size = (w, h)
+
         try:
             # Convert to grayscale
             if len(image.shape) == 3:
@@ -89,29 +113,39 @@ class MarkerAligner:
                 corners = self._detect_corners_edge(gray)
 
             if len(corners) < 4:
+                # Final fallback: simple resize without perspective correction
+                aligned = cv2.resize(image, (self.OUTPUT_WIDTH, self.OUTPUT_HEIGHT))
                 return AlignmentResult(
                     success=False,
+                    aligned_image=aligned,
                     corners_detected=len(corners),
-                    error_message=f"Only {len(corners)} corners detected, need 4"
+                    error_message=f"Only {len(corners)} corners detected, using simple resize fallback",
+                    original_size=original_size
                 )
 
             # Order corners: top-left, top-right, bottom-right, bottom-left
             ordered_corners = self._order_corners(corners[:4])
 
-            # Perform perspective transform
+            # Perform perspective transform to canonical positions
             aligned = self._perspective_transform(image, ordered_corners)
 
             return AlignmentResult(
                 success=True,
                 aligned_image=aligned,
                 corners_detected=4,
-                confidence=0.95
+                confidence=0.95,
+                markers=ordered_corners,
+                original_size=original_size
             )
 
         except Exception as e:
+            # Fallback to simple resize on any error
+            aligned = cv2.resize(image, (self.OUTPUT_WIDTH, self.OUTPUT_HEIGHT))
             return AlignmentResult(
                 success=False,
-                error_message=str(e)
+                aligned_image=aligned,
+                error_message=str(e),
+                original_size=original_size
             )
 
     def _detect_corners(self, gray: np.ndarray) -> List[Tuple[int, int]]:
@@ -242,7 +276,10 @@ class MarkerAligner:
         return corners
 
     def _order_corners(self, corners: List[Tuple[int, int]]) -> np.ndarray:
-        """Order corners as: top-left, top-right, bottom-right, bottom-left."""
+        """Order corners as: top-left, top-right, bottom-left, bottom-right.
+
+        This matches the CANONICAL_MARKERS order for perspective transform.
+        """
         pts = np.array(corners, dtype=np.float32)
 
         # Sort by sum (x+y) - smallest is top-left, largest is bottom-right
@@ -251,32 +288,35 @@ class MarkerAligner:
         bottom_right = pts[np.argmax(s)]
 
         # Sort by difference (y-x) - smallest is top-right, largest is bottom-left
-        d = np.diff(pts, axis=1)
+        d = np.diff(pts, axis=1).flatten()
         top_right = pts[np.argmin(d)]
         bottom_left = pts[np.argmax(d)]
 
-        return np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
+        # Order: TL, TR, BL, BR (matches CANONICAL_MARKERS)
+        return np.array([top_left, top_right, bottom_left, bottom_right], dtype=np.float32)
 
     def _perspective_transform(
         self,
         image: np.ndarray,
         corners: np.ndarray
     ) -> np.ndarray:
-        """Apply perspective transformation to normalize the image."""
-        # Destination points (normalized rectangle)
-        dst = np.array([
-            [0, 0],
-            [self.OUTPUT_WIDTH - 1, 0],
-            [self.OUTPUT_WIDTH - 1, self.OUTPUT_HEIGHT - 1],
-            [0, self.OUTPUT_HEIGHT - 1]
-        ], dtype=np.float32)
+        """Apply perspective transformation to canonical marker positions.
+
+        Transforms detected markers to CANONICAL_MARKERS positions, ensuring
+        all aligned images have markers at identical coordinates.
+        """
+        # Destination points are the canonical marker positions
+        dst = self.CANONICAL_MARKERS
 
         # Compute perspective transform matrix
         M = cv2.getPerspectiveTransform(corners, dst)
 
-        # Apply transform
+        # Apply transform with white border for out-of-bounds regions
         aligned = cv2.warpPerspective(
-            image, M, (self.OUTPUT_WIDTH, self.OUTPUT_HEIGHT)
+            image, M, (self.OUTPUT_WIDTH, self.OUTPUT_HEIGHT),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=(255, 255, 255) if len(image.shape) == 3 else 255
         )
 
         return aligned
@@ -358,3 +398,23 @@ class MarkerAligner:
                 success=False,
                 error_message=str(e)
             )
+
+
+def align_image(image: np.ndarray) -> Tuple[np.ndarray, bool]:
+    """
+    Convenience function to align an OMR image.
+
+    Args:
+        image: Input image (BGR or grayscale)
+
+    Returns:
+        (aligned_image, success) tuple
+    """
+    aligner = MarkerAligner()
+    result = aligner.align(image)
+    return result.aligned_image, result.success
+
+
+def get_canonical_markers() -> np.ndarray:
+    """Get the canonical marker positions used for alignment."""
+    return MarkerAligner.CANONICAL_MARKERS.copy()

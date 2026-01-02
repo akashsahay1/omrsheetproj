@@ -64,6 +64,14 @@ const API = {
         return this.call('get_answer_key');
     },
 
+    async loadSavedAnswerKey() {
+        return this.call('load_saved_answer_key');
+    },
+
+    async clearSavedAnswerKey() {
+        return this.call('clear_saved_answer_key');
+    },
+
     // Processing
     async startProcessing(inputFolder, outputPath, withScoring, examLevel, examType) {
         return this.call('start_processing', inputFolder, outputPath, withScoring, examLevel, examType);

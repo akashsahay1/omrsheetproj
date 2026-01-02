@@ -499,3 +499,393 @@ class BubbleTrainer:
         with open(self.output_dir / 'dataset.yaml', 'w') as f:
             import yaml
             yaml.dump(config, f)
+
+
+class AdaptiveBubbleClassifier:
+    """
+    Adaptive bubble classifier with per-image threshold calibration.
+
+    Key features:
+    1. Uses ML classifier when available, with adaptive confidence threshold
+    2. Falls back to relative darkness comparison
+    3. Implements "first-filled-wins" logic for multi-marked columns
+    """
+
+    def __init__(self, model_path: Optional[str] = None):
+        """
+        Initialize the adaptive classifier.
+
+        Args:
+            model_path: Path to trained bubble classifier model (.pt file)
+        """
+        self.ml_classifier = None
+        self.device = 'cpu'
+
+        if model_path:
+            self._load_ml_classifier(model_path)
+
+    def _load_ml_classifier(self, model_path: str):
+        """Load PyTorch bubble classifier model."""
+        try:
+            import torch
+            from pathlib import Path
+
+            if not Path(model_path).exists():
+                return
+
+            # Load PyTorch model directly
+            # BubbleClassifier is a nn.Module, load it with torch.load()
+            try:
+                from .bubble_classifier import BubbleClassifier
+                # Load state dict into new model instance
+                self.ml_classifier = BubbleClassifier()
+                state_dict = torch.load(model_path, map_location='cpu')
+                if isinstance(state_dict, dict) and 'model_state_dict' in state_dict:
+                    self.ml_classifier.load_state_dict(state_dict['model_state_dict'])
+                elif isinstance(state_dict, dict):
+                    self.ml_classifier.load_state_dict(state_dict)
+                else:
+                    # state_dict is actually the full model
+                    self.ml_classifier = state_dict
+                self.ml_classifier.eval()
+            except ImportError:
+                # Load as raw PyTorch model
+                self.ml_classifier = torch.load(model_path, map_location='cpu')
+                if hasattr(self.ml_classifier, 'eval'):
+                    self.ml_classifier.eval()
+
+            # Set device
+            if torch.backends.mps.is_available():
+                self.device = 'mps'
+            elif torch.cuda.is_available():
+                self.device = 'cuda'
+            else:
+                self.device = 'cpu'
+
+        except Exception as e:
+            print(f"Could not load ML classifier: {e}")
+            self.ml_classifier = None
+
+    def calculate_adaptive_threshold(
+        self,
+        bubble_confidences: List[float]
+    ) -> float:
+        """
+        Calculate adaptive threshold based on confidence distribution.
+
+        For images with clear filled/empty separation, use lower threshold.
+        For ambiguous images, use moderate threshold (not too strict).
+
+        Optimized based on analysis of 302 test images - lower thresholds
+        to catch light scan fills while still filtering obvious noise.
+
+        Args:
+            bubble_confidences: List of ML confidence scores for all bubbles
+
+        Returns:
+            Adaptive threshold value (0.4-0.7 range)
+        """
+        if not bubble_confidences:
+            return 0.5  # Lower default
+
+        confidences = np.array(bubble_confidences)
+        std_conf = np.std(confidences)
+
+        # High variance = clear separation = lower threshold OK
+        if std_conf > 0.25:
+            return 0.4  # Very clear separation
+        elif std_conf > 0.18:
+            return 0.45
+        elif std_conf > 0.12:
+            return 0.5
+        elif std_conf > 0.08:
+            return 0.55
+        else:
+            # Low variance = still be permissive
+            return 0.6
+
+    def classify_bubbles_in_column(
+        self,
+        bubble_images: List[np.ndarray],
+        threshold: Optional[float] = None,
+        use_threshold_fallback: bool = True,
+        strict_mode: Optional[bool] = None
+    ) -> List[Tuple[bool, float]]:
+        """
+        Classify all bubbles in a column using hybrid ML + threshold approach.
+
+        Args:
+            bubble_images: List of bubble images (grayscale, ~28x28)
+            threshold: Optional explicit threshold, or auto-calculate
+            use_threshold_fallback: If True, use threshold-based as fallback/tiebreaker
+            strict_mode: If True, use stricter thresholds. If None, auto-detect
+                        based on number of bubbles (26 = name field = strict)
+
+        Returns:
+            List of (is_filled, confidence) tuples
+        """
+        if not bubble_images:
+            return []
+
+        # Auto-detect strict mode: 26 bubbles = name field = use strict thresholds
+        if strict_mode is None:
+            strict_mode = len(bubble_images) >= 26
+
+        # Always compute threshold-based results as fallback
+        threshold_results = self._classify_threshold_batch(bubble_images, strict_mode=strict_mode)
+
+        if self.ml_classifier is not None:
+            # Use ML classifier
+            ml_results = self._classify_ml_batch(bubble_images)
+
+            # Calculate adaptive threshold if not provided
+            if threshold is None:
+                confidences = [conf for _, conf in ml_results]
+                threshold = self.calculate_adaptive_threshold(confidences)
+
+            results = []
+            for i, (is_filled, conf) in enumerate(ml_results):
+                # Apply adaptive threshold
+                if is_filled and conf >= threshold:
+                    results.append((True, conf))
+                elif not is_filled and (1 - conf) >= threshold:
+                    results.append((False, 1 - conf))
+                else:
+                    # Ambiguous ML result - be conservative
+                    # Only use threshold as tiebreaker if threshold has high confidence (>0.7)
+                    if use_threshold_fallback and i < len(threshold_results):
+                        thresh_is_filled, thresh_conf = threshold_results[i]
+                        if thresh_conf >= 0.7:
+                            results.append(threshold_results[i])
+                        else:
+                            # Both ML and threshold are ambiguous - default to not filled
+                            results.append((False, 0.5))
+                    else:
+                        results.append((is_filled, conf))
+
+            # If ML finds no filled bubbles but threshold does, use threshold results
+            ml_filled = sum(1 for is_f, _ in results if is_f)
+            thresh_filled = sum(1 for is_f, _ in threshold_results if is_f)
+
+            if ml_filled == 0 and thresh_filled > 0:
+                return threshold_results
+
+            return results
+        else:
+            # No ML classifier - use threshold-based
+            return threshold_results
+
+    def _classify_ml_batch(
+        self,
+        bubble_images: List[np.ndarray]
+    ) -> List[Tuple[bool, float]]:
+        """Classify bubbles using ML model."""
+        try:
+            import torch
+
+            results = []
+            for img in bubble_images:
+                # Preprocess
+                if len(img.shape) == 3:
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+                # Resize to expected size
+                img = cv2.resize(img, (28, 28))
+
+                # Normalize and convert to tensor
+                tensor = torch.FloatTensor(img).unsqueeze(0).unsqueeze(0) / 255.0
+
+                # Move to device if needed
+                if hasattr(self.ml_classifier, 'eval'):
+                    self.ml_classifier.eval()
+                    with torch.no_grad():
+                        output = self.ml_classifier(tensor)
+                        prob = torch.sigmoid(output).item()
+                        is_filled = prob > 0.5
+                        confidence = prob if is_filled else (1 - prob)
+                        results.append((is_filled, confidence))
+                elif hasattr(self.ml_classifier, 'predict'):
+                    is_filled, confidence = self.ml_classifier.predict(img)
+                    results.append((is_filled, confidence))
+                else:
+                    results.append((False, 0.5))
+
+            return results
+
+        except Exception as e:
+            # Fallback to threshold
+            return self._classify_threshold_batch(bubble_images)
+
+    def _classify_threshold_batch(
+        self,
+        bubble_images: List[np.ndarray],
+        strict_mode: bool = False
+    ) -> List[Tuple[bool, float]]:
+        """
+        Classify bubbles using darkness threshold with relative ratio.
+
+        Args:
+            bubble_images: List of bubble images
+            strict_mode: If True, use stricter thresholds for name fields (25+ columns)
+                        to avoid false positives in empty columns
+
+        Optimized thresholds based on visual analysis of 302 test images:
+        1. Strong relative (1.5x median) with minimum absolute - catches light scans
+        2. Moderate relative (1.3x median) with good absolute - balanced
+        3. High absolute with gap - catches dark scans
+
+        This handles varying scan quality while preventing false positives.
+        """
+        results = []
+        darkness_values = []
+
+        # Calculate darkness for all bubbles
+        for img in bubble_images:
+            if len(img.shape) == 3:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            darkness = 255 - np.mean(img)  # Higher = darker (filled)
+            darkness_values.append(darkness)
+
+        if not darkness_values:
+            return results
+
+        # Calculate statistics
+        median_darkness = np.median(darkness_values)
+        max_darkness = max(darkness_values)
+        min_darkness = min(darkness_values)
+
+        # Use max(median, 5) to avoid division issues with very low baselines
+        safe_median = max(median_darkness, 5)
+
+        for i, darkness in enumerate(darkness_values):
+            # Calculate relative ratio and gap
+            relative_ratio = darkness / safe_median
+            gap = darkness - median_darkness
+
+            # Relative gap: what fraction of the max-median range is this bubble's gap?
+            max_gap = max_darkness - median_darkness
+            relative_gap = gap / max(max_gap, 1)
+
+            # Detection criteria (optimized 2026-01-03):
+            # When there's a clearly filled bubble (max > 150), be stricter about what counts as filled
+            # This prevents false positives from slight variations when actual filled bubble is obvious
+            is_filled = False
+
+            if max_darkness > 150:
+                # High contrast image - use stricter criteria
+                # Only mark as filled if darkness is at least 40% of max or relative_gap > 0.5
+                if darkness >= max_darkness * 0.4 or (darkness >= 100 and relative_gap > 0.5):
+                    if darkness >= 12 and relative_ratio >= 1.5:
+                        is_filled = True
+                    elif darkness >= 25 and relative_ratio >= 1.3:
+                        is_filled = True
+            else:
+                # Low contrast image
+                if strict_mode:
+                    # Stricter criteria for name fields to avoid false positives
+                    if darkness >= 50 and relative_ratio >= 1.5:
+                        is_filled = True
+                    elif darkness >= 60 and relative_ratio >= 1.3:
+                        is_filled = True
+                    elif darkness >= 80 and gap >= 15:
+                        is_filled = True
+                else:
+                    # Original criteria for section/class/roll fields
+                    if darkness >= 12 and relative_ratio >= 1.5:
+                        is_filled = True
+                    elif darkness >= 25 and relative_ratio >= 1.3:
+                        is_filled = True
+                    elif darkness >= 35 and gap >= 8:
+                        is_filled = True
+
+            if is_filled:
+                # Likely filled - confidence based on how much it stands out
+                confidence = min(1.0, 0.5 + gap / (max_darkness - median_darkness + 1) * 0.5)
+                results.append((True, confidence))
+            else:
+                # Likely empty
+                confidence = min(1.0, 0.5 + (median_darkness - darkness) / (median_darkness - min_darkness + 1) * 0.5)
+                results.append((False, confidence))
+
+        return results
+
+    def select_from_column(
+        self,
+        bubble_results: List[Tuple[int, bool, float]]
+    ) -> Tuple[Optional[int], float]:
+        """
+        Select which bubble is filled in a column.
+
+        IMPORTANT: When multiple bubbles are filled, picks FIRST one (lowest row index),
+        NOT the darkest one. This matches the user requirement.
+
+        Args:
+            bubble_results: List of (row_index, is_filled, confidence) tuples
+
+        Returns:
+            (selected_row_index, confidence) or (None, 0.0) if no bubble is filled
+        """
+        # Filter to filled bubbles
+        filled = [(row_idx, conf) for row_idx, is_filled, conf in bubble_results if is_filled]
+
+        if not filled:
+            return (None, 0.0)
+
+        if len(filled) == 1:
+            return filled[0]
+
+        # Multiple filled: pick FIRST (lowest row index)
+        filled.sort(key=lambda x: x[0])  # Sort by row index ascending
+        return filled[0]
+
+    def classify_and_select(
+        self,
+        bubble_images: List[np.ndarray],
+        values: List[str]
+    ) -> Tuple[str, float]:
+        """
+        Classify bubbles in a column and return the selected value.
+
+        Args:
+            bubble_images: List of bubble images for each row in the column
+            values: Possible values for each row (e.g., ['A', 'B', ..., 'Z'])
+
+        Returns:
+            (selected_value, confidence) or (' ', 0.0) if no selection
+        """
+        results = self.classify_bubbles_in_column(bubble_images)
+
+        # Create bubble_results with row indices
+        bubble_results = [
+            (row_idx, is_filled, conf)
+            for row_idx, (is_filled, conf) in enumerate(results)
+        ]
+
+        selected_row, confidence = self.select_from_column(bubble_results)
+
+        if selected_row is not None and selected_row < len(values):
+            return (values[selected_row], confidence)
+        else:
+            return (' ', 0.0)
+
+
+def create_adaptive_classifier(model_path: Optional[str] = None) -> AdaptiveBubbleClassifier:
+    """
+    Factory function to create an AdaptiveBubbleClassifier.
+
+    Searches for model in common locations if path not provided.
+    """
+    if model_path is None:
+        # Try common model locations
+        common_paths = [
+            "models/bubble_classifier_v4.pt",
+            "models/bubble_classifier_v3.pt",
+            "models/bubble_classifier_v2.pt",
+            "models/bubble_classifier.pt",
+        ]
+        for path in common_paths:
+            if Path(path).exists():
+                model_path = path
+                break
+
+    return AdaptiveBubbleClassifier(model_path)

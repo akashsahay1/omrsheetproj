@@ -48,6 +48,10 @@ class Settings:
     window_width: int = 1280
     window_height: int = 800
 
+    # Answer key persistence - stores the actual answer key data, not just the file path
+    saved_answer_key: Optional[Dict[str, Any]] = None
+    saved_answer_key_name: str = ""
+
     _settings_file: str = field(default="settings.json", repr=False)
 
     @classmethod
@@ -83,7 +87,7 @@ class Settings:
 
         # Load simple fields
         for key in ['last_input_folder', 'last_output_folder', 'last_answer_key_path',
-                    'window_width', 'window_height']:
+                    'window_width', 'window_height', 'saved_answer_key', 'saved_answer_key_name']:
             if key in data:
                 setattr(self, key, data[key])
 
@@ -98,7 +102,9 @@ class Settings:
                 'last_output_folder': self.last_output_folder,
                 'last_answer_key_path': self.last_answer_key_path,
                 'window_width': self.window_width,
-                'window_height': self.window_height
+                'window_height': self.window_height,
+                'saved_answer_key': self.saved_answer_key,
+                'saved_answer_key_name': self.saved_answer_key_name
             }
 
             # Ensure directory exists
@@ -121,10 +127,68 @@ class Settings:
             'last_output_folder': self.last_output_folder,
             'last_answer_key_path': self.last_answer_key_path,
             'window_width': self.window_width,
-            'window_height': self.window_height
+            'window_height': self.window_height,
+            'saved_answer_key': self.saved_answer_key,
+            'saved_answer_key_name': self.saved_answer_key_name
         }
 
     def update_from_dict(self, data: Dict[str, Any]) -> None:
         """Update settings from dictionary"""
         self._load_from_dict(data)
         self.save()
+
+    def save_answer_key(self, answer_key) -> bool:
+        """
+        Persist answer key to settings file.
+
+        Args:
+            answer_key: AnswerKey object to save
+
+        Returns:
+            True if saved successfully
+        """
+        try:
+            self.saved_answer_key = {
+                'name': getattr(answer_key, 'name', ''),
+                'description': getattr(answer_key, 'description', ''),
+                'total_questions': getattr(answer_key, 'total_questions', 60),
+                'answers': dict(answer_key.answers) if hasattr(answer_key, 'answers') else {}
+            }
+            self.saved_answer_key_name = getattr(answer_key, 'name', '')
+            return self.save()
+        except Exception as e:
+            print(f"Error saving answer key: {e}")
+            return False
+
+    def get_saved_answer_key(self):
+        """
+        Load persisted answer key.
+
+        Returns:
+            AnswerKey object if saved, None otherwise
+        """
+        if not self.saved_answer_key:
+            return None
+
+        try:
+            # Import AnswerKey here to avoid circular imports
+            from ..models.answer_key import AnswerKey
+
+            return AnswerKey(
+                answers=self.saved_answer_key.get('answers', {}),
+                name=self.saved_answer_key.get('name', ''),
+                description=self.saved_answer_key.get('description', ''),
+                total_questions=self.saved_answer_key.get('total_questions', 60)
+            )
+        except ImportError:
+            # Return raw dict if AnswerKey class not available
+            return self.saved_answer_key
+        except Exception as e:
+            print(f"Error loading saved answer key: {e}")
+            return None
+
+    def clear_saved_answer_key(self) -> bool:
+        """Clear the saved answer key."""
+        self.saved_answer_key = None
+        self.saved_answer_key_name = ""
+        return self.save()

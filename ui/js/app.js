@@ -269,6 +269,31 @@ function updateAnswerKeyCount() {
  * Load answer key status
  */
 async function loadAnswerKeyStatus() {
+    // First, try to load saved answer key from previous session
+    try {
+        const savedResult = await API.loadSavedAnswerKey();
+
+        if (savedResult.success) {
+            console.log('Loaded saved answer key:', savedResult.name || 'Unnamed');
+            AppState.answerKey = savedResult.answers;
+
+            // Update grid with saved answers
+            for (let q = 1; q <= 60; q++) {
+                const select = document.getElementById(`ak-${q}`);
+                if (select && savedResult.answers[q]) {
+                    select.value = savedResult.answers[q];
+                }
+            }
+
+            updateAnswerKeyCount();
+            updateAnswerKeyStatus();
+            return;
+        }
+    } catch (e) {
+        console.log('No saved answer key found:', e);
+    }
+
+    // Fall back to checking current answer key
     const result = await API.getAnswerKey();
 
     if (result.success) {
