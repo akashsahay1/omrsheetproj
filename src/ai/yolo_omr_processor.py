@@ -1485,14 +1485,10 @@ class YOLOOMRProcessor:
         """
         # Test columns 0-9 (first 10 letters of name)
         test_cols = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-        # When marker-based alignment succeeds, grid is already at correct position
-        # Only need very small adjustments (±15 pixels max)
-        if hasattr(self, '_markers_aligned') and self._markers_aligned:
-            y_offsets_to_test = list(range(-15, 16, 5))  # ±15 pixels when markers aligned
-        elif hasattr(self, '_is_chayan_batch') and self._is_chayan_batch:
-            y_offsets_to_test = list(range(-15, 16, 5))  # ±15 pixels for Chayan (already calibrated)
-        else:
-            y_offsets_to_test = list(range(-60, 55, 5))  # Full range for fallback
+        # With dynamic scaling from FIELD_CONFIGS_ORIGINAL, coordinates are already calibrated
+        # Only need small adjustments (±20 pixels max) to handle minor scan variations
+        # Using a tighter range prevents picking wildly wrong offsets
+        y_offsets_to_test = list(range(-20, 21, 5))  # ±20 pixels for all cases
 
         # Collect scores for all offsets
         offset_scores = []
