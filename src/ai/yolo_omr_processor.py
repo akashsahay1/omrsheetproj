@@ -1790,23 +1790,28 @@ class YOLOOMRProcessor:
         else:
             # Dynamic scaling based on actual image dimensions
             REF_WIDTH = 1662  # Reference image width (41_625.jpg)
+            REF_HEIGHT = 2320  # Reference image height
             if hasattr(self, '_original_size'):
                 orig_w, orig_h = self._original_size
                 scale_x = self.TARGET_WIDTH / orig_w
                 scale_y = self.TARGET_HEIGHT / orig_h
                 # Width-based X offset: narrower images need positive offset (move right)
                 width_diff = REF_WIDTH - orig_w
+                height_diff = REF_HEIGHT - orig_h
                 x_offset = int(width_diff * scale_x * 2.0)  # 2x the scaled difference
+                # Height-based Y offset: shorter images need negative offset (move up)
+                y_offset_height = int(height_diff * scale_y * -1.5)
             else:
                 # Default scale for reference image
                 scale_x = self.TARGET_WIDTH / 1662
                 scale_y = self.TARGET_HEIGHT / 2320
                 x_offset = 0
+                y_offset_height = 0
 
-            # Scale all coordinates with width-based X correction
+            # Scale all coordinates with width/height-based corrections
             origin = (
                 int(orig_config['origin'][0] * scale_x) + x_offset,
-                int(orig_config['origin'][1] * scale_y)
+                int(orig_config['origin'][1] * scale_y) + y_offset_height
             )
             bubble_size = (
                 int(orig_config['bubble_size'][0] * scale_x),
@@ -2450,7 +2455,8 @@ class YOLOOMRProcessor:
                 best_row, best_score, _ = max(bubble_scores, key=lambda x: (x[1], -x[0], -x[2]))
 
                 # Only mark as filled if score is high enough
-                if best_score > 0.6:
+                # Increased from 0.6 to 0.7 to reduce false positives
+                if best_score > 0.7:
                     if best_row < len(values):
                         result_chars.append(values[best_row])
                         consecutive_empty = 0
@@ -2490,23 +2496,28 @@ class YOLOOMRProcessor:
         else:
             # Dynamic scaling based on actual image dimensions
             REF_WIDTH = 1662  # Reference image width (41_625.jpg)
+            REF_HEIGHT = 2320  # Reference image height
             if hasattr(self, '_original_size'):
                 orig_w, orig_h = self._original_size
                 scale_x = self.TARGET_WIDTH / orig_w
                 scale_y = self.TARGET_HEIGHT / orig_h
                 # Width-based X offset: narrower images need positive offset (move right)
                 width_diff = REF_WIDTH - orig_w
+                height_diff = REF_HEIGHT - orig_h
                 x_offset = int(width_diff * scale_x * 2.0)  # 2x the scaled difference
+                # Height-based Y offset: shorter images need negative offset (move up)
+                y_offset_height = int(height_diff * scale_y * -1.5)
             else:
                 # Default scale for reference image
                 scale_x = self.TARGET_WIDTH / 1662
                 scale_y = self.TARGET_HEIGHT / 2320
                 x_offset = 0
+                y_offset_height = 0
 
-            # Scale all coordinates with width-based X correction
+            # Scale all coordinates with width/height-based corrections
             origin = (
                 int(orig_config['origin'][0] * scale_x) + x_offset,
-                int(orig_config['origin'][1] * scale_y)
+                int(orig_config['origin'][1] * scale_y) + y_offset_height
             )
             bubble_size = (
                 int(orig_config['bubble_size'][0] * scale_x),
@@ -2577,8 +2588,9 @@ class YOLOOMRProcessor:
                 bubble_scores.append((row, filled_score, darkness))
 
             if bubble_scores:
-                # Find bubbles with high filled score (ML confidence > 0.6)
-                filled_candidates = [(r, s, d) for r, s, d in bubble_scores if s > 0.6]
+                # Find bubbles with high filled score (ML confidence > 0.7)
+                # Increased from 0.6 to reduce false positives from stray marks
+                filled_candidates = [(r, s, d) for r, s, d in bubble_scores if s > 0.7]
 
                 if filled_candidates:
                     # Always pick FIRST filled bubble (lowest row number)
