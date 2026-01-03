@@ -158,10 +158,11 @@ class DynamicGridDetector:
             block_cols = col_centers[start_col:end_col]
 
             if len(block_cols) >= 3:
-                # Origin is first column, but Y needs adjustment
-                # First row detected might be header, so add row_gap for Q1
+                # Origin is first column of first answer row
+                # HoughCircles only detects bubbles (circles), not header text
+                # So first_row_y is already Q1, not the header
                 origin_x = int(block_cols[0])
-                origin_y = int(first_row_y + row_gap)  # Skip header row
+                origin_y = int(first_row_y)  # First detected row IS Q1
 
                 grid = DetectedGrid(
                     origin=(origin_x, origin_y),
