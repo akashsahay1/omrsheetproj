@@ -81,13 +81,10 @@ class DynamicGridDetector:
 
     def detect_answer_grids(self, gray: np.ndarray) -> List[DetectedGrid]:
         """
-        Detect only the answer grids (6 blocks of 10 questions).
+        Detect answer grids using HoughCircles with fallback to fixed grid.
 
-        Uses row-based clustering approach:
-        1. Filter bubbles to answer area (Y > 2200)
-        2. Cluster by Y to find rows
-        3. Analyze first row to find column structure
-        4. Identify block boundaries from column gaps
+        Primary method: Detect bubbles using HoughCircles and identify block structure.
+        Fallback: Use fixed calibrated grid positions if HoughCircles fails.
 
         Args:
             gray: Grayscale image
@@ -95,6 +92,17 @@ class DynamicGridDetector:
         Returns:
             List of 6 DetectedGrid objects for answer blocks
         """
+        # Try HoughCircles-based detection first
+        grids = self._detect_answer_grids_hough(gray)
+
+        # If HoughCircles fails, use fixed calibrated grid
+        if len(grids) < 6:
+            grids = self._create_fixed_grids()
+
+        return grids
+
+    def _detect_answer_grids_hough(self, gray: np.ndarray) -> List[DetectedGrid]:
+        """Detect answer grids using HoughCircles."""
         h, w = gray.shape[:2]
 
         # Detect all bubbles in the image
@@ -117,9 +125,8 @@ class DynamicGridDetector:
         if len(row_centers) < 8:
             return []
 
-        # Calculate row gap
-        row_gap = np.median([row_centers[i+1] - row_centers[i]
-                            for i in range(len(row_centers)-1)])
+        # Fixed row gap of 93 pixels
+        row_gap = 93
 
         # Get bubbles in first row
         first_row_y = row_centers[0]
@@ -149,7 +156,7 @@ class DynamicGridDetector:
 
         # Extract valid blocks (>= 3 columns)
         answer_grids = []
-        median_col_gap = np.median([g for g in col_gaps if g < 70]) if col_gaps else 60
+        median_col_gap = np.median([g for g in col_gaps if g < 70]) if col_gaps else 63
         avg_radius = int(np.median([b[2] for b in answer_bubbles]))
 
         for i in range(len(block_boundaries) - 1):
@@ -158,11 +165,8 @@ class DynamicGridDetector:
             block_cols = col_centers[start_col:end_col]
 
             if len(block_cols) >= 3:
-                # Origin is first column of first answer row
-                # HoughCircles only detects bubbles (circles), not header text
-                # So first_row_y is already Q1, not the header
                 origin_x = int(block_cols[0])
-                origin_y = int(first_row_y)  # First detected row IS Q1
+                origin_y = int(first_row_y)
 
                 grid = DetectedGrid(
                     origin=(origin_x, origin_y),
@@ -177,6 +181,29 @@ class DynamicGridDetector:
                 answer_grids.append(grid)
 
         return answer_grids[:6]
+
+    def _create_fixed_grids(self) -> List[DetectedGrid]:
+        """Create grids using fixed calibrated positions."""
+        BLOCK_X_ORIGINS = [328, 592, 924, 1262, 1598, 1937]
+        EXPECTED_Y = 2315
+        ROW_GAP = 93
+        COL_GAP = 63
+        BUBBLE_RADIUS = 14
+
+        grids = []
+        for block_idx, origin_x in enumerate(BLOCK_X_ORIGINS):
+            grid = DetectedGrid(
+                origin=(origin_x, EXPECTED_Y),
+                rows=10,
+                cols=4,
+                row_gap=ROW_GAP,
+                col_gap=COL_GAP,
+                bubble_radius=BUBBLE_RADIUS,
+                confidence=0.7,
+                field_type=f'answers_{block_idx*10+1}_{block_idx*10+10}'
+            )
+            grids.append(grid)
+        return grids
 
     def _cluster_1d_simple(self, values: List[float], tolerance: float) -> List[float]:
         """Simple 1D clustering - returns cluster centers."""

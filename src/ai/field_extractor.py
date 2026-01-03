@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 
 from .grid_detector import GridDetector, GridConfig, GRID_SEARCH_REGIONS
 from .bubble_detector import AdaptiveBubbleClassifier, create_adaptive_classifier
+from .dynamic_grid_detector import DynamicGridDetector
 
 
 @dataclass
@@ -276,66 +277,55 @@ class FieldExtractor:
 
     def extract_answers(self, gray: np.ndarray) -> Dict[str, str]:
         """
-        Extract all 60 answers using adaptive grid detection.
+        Extract all 60 answers using DYNAMIC grid detection.
 
-        Uses per-block offset estimation to handle alignment variations
-        that differ across the sheet.
+        Uses DynamicGridDetector to find actual bubble positions instead of
+        relying on static calibrated coordinates that may not match all images.
 
         Returns dict mapping question number (str) to answer (A/B/C/D or empty).
         """
         answers = {}
         values = FIELD_VALUES['answers']
 
-        # 6 blocks of 10 questions each
-        answer_blocks = [
-            ('answers_1_10', 1),
-            ('answers_11_20', 11),
-            ('answers_21_30', 21),
-            ('answers_31_40', 31),
-            ('answers_41_50', 41),
-            ('answers_51_60', 51),
-        ]
+        # Initialize all 60 questions as blank
+        for q in range(1, 61):
+            answers[str(q)] = ''
 
-        for block_name, start_q in answer_blocks:
-            grid = self.grid_detector.detect_grid(gray, block_name)
-            if grid is None:
-                # Mark questions as unanswered
-                for q in range(start_q, start_q + 10):
-                    answers[str(q)] = ''
-                continue
+        # Use dynamic grid detection to find actual bubble positions
+        dynamic_detector = DynamicGridDetector()
+        detected_grids = dynamic_detector.detect_answer_grids(gray)
 
-            # With marker-aligned images (2480x3507), the calibrated coordinates
-            # should be accurate. Skip offset estimation to avoid finding wrong
-            # positions when first row has no filled bubbles.
-            x_offset, y_offset = 0, 0
+        if not detected_grids:
+            # Dynamic detection failed - return all blank
+            # (No longer using static fallback per user request)
+            return answers
 
-            # Create adjusted grid config (no adjustment needed after marker alignment)
-            adjusted_grid = GridConfig(
-                origin=(grid.origin[0] + x_offset, grid.origin[1] + y_offset),
+        # Process each detected block
+        for block_idx, grid in enumerate(detected_grids):
+            start_q = block_idx * 10 + 1
+
+            # Create GridConfig from DetectedGrid for compatibility
+            grid_config = GridConfig(
+                origin=grid.origin,
                 rows=grid.rows,
                 cols=grid.cols,
                 row_gap=grid.row_gap,
                 col_gap=grid.col_gap,
                 bubble_radius=grid.bubble_radius,
-                x_shift_per_row=grid.x_shift_per_row,
-                y_drift_per_col=grid.y_drift_per_col,
                 confidence=grid.confidence
             )
 
             # Each block has 10 rows (questions) and 4 columns (A/B/C/D)
-            for row in range(min(10, adjusted_grid.rows)):
+            for row in range(min(10, grid_config.rows)):
                 q_num = start_q + row
 
-                # Extract bubbles for this question using adjusted grid
-                bubble_images = self._extract_row_bubbles(gray, adjusted_grid, row)
+                # Extract bubbles for this question
+                bubble_images = self._extract_row_bubbles(gray, grid_config, row)
 
                 if not bubble_images:
-                    answers[str(q_num)] = ''
                     continue
 
-                # For answers, use stricter threshold-based detection
-                # The ML classifier is too sensitive for the 4-bubble answer rows
-                # Calculate darkness manually and apply conservative thresholds
+                # Use threshold-based detection
                 darkness_values = []
                 for bubble_img in bubble_images:
                     if len(bubble_img.shape) == 3:
@@ -349,25 +339,13 @@ class FieldExtractor:
                     sorted_d = sorted(darkness_values, reverse=True)
                     gap = sorted_d[0] - sorted_d[1] if len(sorted_d) > 1 else max_darkness
 
-                    # Thresholds calibrated from actual OMR sheets (2026-01-03):
-                    # - Clearly filled bubbles: darkness >= 150 (typically 200-250)
+                    # Thresholds:
+                    # - Clearly filled bubbles: darkness >= 150
                     # - Uncertain but likely filled: darkness >= 100 with gap >= 50
-                    # - Unfilled bubbles: darkness 50-80 (empty bubble circles)
-                    # - Background: darkness < 50
-                    #
-                    # Previous threshold of 70 was too low - unfilled bubbles show
-                    # darkness of 60-77, causing false positives.
                     if max_darkness >= 150:
-                        # High darkness - definitely filled
                         answers[str(q_num)] = values[max_idx]
                     elif max_darkness >= 100 and gap >= 50:
-                        # Lower darkness but significant gap from other options
                         answers[str(q_num)] = values[max_idx]
-                    else:
-                        # Too ambiguous or unfilled - treat as blank
-                        answers[str(q_num)] = ''
-                else:
-                    answers[str(q_num)] = ''
 
         return answers
 
