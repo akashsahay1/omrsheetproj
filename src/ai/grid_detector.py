@@ -95,20 +95,19 @@ class GridDetector:
         self,
         gray: np.ndarray,
         field_name: str,
-        region: Optional[Tuple[int, int, int, int]] = None
+        region: Optional[Tuple[int, int, int, int]] = None,
+        force_dynamic: bool = False
     ) -> Optional[GridConfig]:
         """
         Detect bubble grid in specified region.
-
-        For known fields, uses calibrated coordinates which are more reliable
-        than dynamic HoughCircles detection. Calibrated coordinates work after
-        marker-based alignment to canonical frame (2480x3507).
 
         Args:
             gray: Grayscale image (should be aligned to canonical frame)
             field_name: Name of the field ('name', 'roll_number', etc.)
             region: Optional (x, y, width, height) search region.
                    If None, uses GRID_SEARCH_REGIONS for the field.
+            force_dynamic: If True, always try dynamic detection first.
+                          If False, uses calibrated coordinates for reliability.
 
         Returns:
             GridConfig with detected grid parameters, or None if detection fails
@@ -116,28 +115,60 @@ class GridDetector:
         if region is None:
             region = GRID_SEARCH_REGIONS.get(field_name)
 
-        # Use calibrated coordinates for known fields (more reliable)
+        # Get calibrated config as fallback
         calibrated = self._fallback_grid_config(field_name, region or (0, 0, 100, 100))
+
+        # Try dynamic detection first if forced or no high-confidence calibration
+        if force_dynamic or calibrated.confidence < 0.9:
+            dynamic_config = self._detect_grid_dynamic(gray, field_name, region)
+            if dynamic_config is not None and dynamic_config.confidence >= 0.7:
+                return dynamic_config
+
+        # Use calibrated for known fields (more reliable after marker alignment)
         if calibrated.confidence >= 0.9:
             return calibrated
 
-        # For unknown fields, try dynamic detection
+        # Try dynamic detection as last resort
+        dynamic_config = self._detect_grid_dynamic(gray, field_name, region)
+        if dynamic_config is not None:
+            return dynamic_config
+
+        return calibrated
+
+    def _detect_grid_dynamic(
+        self,
+        gray: np.ndarray,
+        field_name: str,
+        region: Optional[Tuple[int, int, int, int]]
+    ) -> Optional[GridConfig]:
+        """
+        Dynamically detect grid using HoughCircles.
+
+        Args:
+            gray: Grayscale image
+            field_name: Name of the field
+            region: Search region (x, y, width, height)
+
+        Returns:
+            GridConfig if detection succeeds, None otherwise
+        """
         if region is None:
             return None
 
         x, y, w, h = region
+        if y + h > gray.shape[0] or x + w > gray.shape[1]:
+            return None
+
         roi = gray[y:y+h, x:x+w]
 
         # Detect circles using HoughCircles
         circles = self._detect_circles(roi)
 
         if circles is None or len(circles) < 4:
-            # Try alternative detection
             circles = self._detect_circles_relaxed(roi)
 
         if circles is None or len(circles) < 4:
-            # Fall back to calibrated config
-            return calibrated
+            return None
 
         # Offset circles to image coordinates
         circles_abs = [(c[0] + x, c[1] + y, c[2]) for c in circles]
@@ -150,10 +181,9 @@ class GridDetector:
             expected = EXPECTED_GRIDS.get(field_name)
             if expected:
                 if not self._validate_grid(grid_config, expected):
-                    return calibrated
-            return grid_config
+                    return None
 
-        return calibrated
+        return grid_config
 
     def _detect_circles(self, roi: np.ndarray) -> Optional[List[Tuple[int, int, int]]]:
         """Detect circles using HoughCircles with standard parameters."""
@@ -407,58 +437,59 @@ class GridDetector:
             ),
             # Answer blocks - 6 blocks of 10 questions each
             # Each block: 10 rows (questions) x 4 cols (A/B/C/D)
-            # Precisely calibrated 2026-01-03 using HoughCircles bubble detection
+            # Recalibrated 2026-01-03: X origins found by peak detection on 41_634.jpg
+            # Y=2315 is Q1 row, col_gap detected ~55-66px (using 60 as average)
             'answers_1_10': GridConfig(
-                origin=(324, 2221),  # Calibrated via HoughCircles
-                rows=10,            # Q1-10
-                cols=4,             # A, B, C, D
-                row_gap=93,         # Precise: was 90, actually 93
-                col_gap=63,         # Precise: was 62, actually 63
+                origin=(328, 2315),   # Recalibrated from peak detection
+                rows=10,              # Q1-10
+                cols=4,               # A, B, C, D
+                row_gap=93,
+                col_gap=60,           # Adjusted from detected gaps (55-66)
                 bubble_radius=14,
                 confidence=0.95
             ),
             'answers_11_20': GridConfig(
-                origin=(660, 2221),  # Calibrated via HoughCircles
+                origin=(592, 2315),   # Recalibrated (was 660, -68px)
                 rows=10,
                 cols=4,
                 row_gap=93,
-                col_gap=63,
+                col_gap=60,
                 bubble_radius=14,
                 confidence=0.95
             ),
             'answers_21_30': GridConfig(
-                origin=(1058, 2217),  # Calibrated via HoughCircles
+                origin=(924, 2315),   # Recalibrated (was 1058, -134px)
                 rows=10,
                 cols=4,
                 row_gap=93,
-                col_gap=63,
+                col_gap=60,
                 bubble_radius=14,
                 confidence=0.95
             ),
             'answers_31_40': GridConfig(
-                origin=(1396, 2223),  # Calibrated via HoughCircles
+                origin=(1262, 2315),  # Recalibrated (was 1396, -134px)
                 rows=10,
                 cols=4,
                 row_gap=93,
-                col_gap=63,
+                col_gap=60,
                 bubble_radius=14,
                 confidence=0.95
             ),
             'answers_41_50': GridConfig(
-                origin=(1795, 2226),  # Calibrated via HoughCircles
+                origin=(1598, 2315),  # Peak detection found leftmost at ~1598
                 rows=10,
                 cols=4,
                 row_gap=93,
-                col_gap=63,
+                col_gap=60,
                 bubble_radius=14,
                 confidence=0.95
             ),
             'answers_51_60': GridConfig(
-                origin=(2163, 2222),  # Extrapolated from pattern (+368 X gap)
+                origin=(1937, 2315),  # Peak detection found leftmost at ~1937
                 rows=10,
                 cols=4,
                 row_gap=93,
-                col_gap=63,
+                col_gap=60,
                 bubble_radius=14,
                 confidence=0.95
             ),

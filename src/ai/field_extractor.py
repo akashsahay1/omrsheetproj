@@ -304,10 +304,12 @@ class FieldExtractor:
                     answers[str(q)] = ''
                 continue
 
-            # Estimate offset for THIS block to handle alignment variations
-            x_offset, y_offset = self._estimate_block_offset(gray, grid)
+            # With marker-aligned images (2480x3507), the calibrated coordinates
+            # should be accurate. Skip offset estimation to avoid finding wrong
+            # positions when first row has no filled bubbles.
+            x_offset, y_offset = 0, 0
 
-            # Create adjusted grid config
+            # Create adjusted grid config (no adjustment needed after marker alignment)
             adjusted_grid = GridConfig(
                 origin=(grid.origin[0] + x_offset, grid.origin[1] + y_offset),
                 rows=grid.rows,
@@ -347,21 +349,22 @@ class FieldExtractor:
                     sorted_d = sorted(darkness_values, reverse=True)
                     gap = sorted_d[0] - sorted_d[1] if len(sorted_d) > 1 else max_darkness
 
-                    # Optimized thresholds based on extensive ground truth analysis:
-                    # - Clearly filled bubbles: darkness >= 70
-                    # - Lightly filled with clear gap: darkness >= 50 and gap >= 5
-                    # - Empty bubbles: darkness < 50 OR (darkness 50-70 with gap < 5)
+                    # Thresholds calibrated from actual OMR sheets (2026-01-03):
+                    # - Clearly filled bubbles: darkness >= 150 (typically 200-250)
+                    # - Uncertain but likely filled: darkness >= 100 with gap >= 50
+                    # - Unfilled bubbles: darkness 50-80 (empty bubble circles)
+                    # - Background: darkness < 50
                     #
-                    # Gap threshold of 5 catches lightly-filled bubbles that stand out
-                    # from the background while avoiding false positives
-                    if max_darkness >= 70:
+                    # Previous threshold of 70 was too low - unfilled bubbles show
+                    # darkness of 60-77, causing false positives.
+                    if max_darkness >= 150:
                         # High darkness - definitely filled
                         answers[str(q_num)] = values[max_idx]
-                    elif max_darkness >= 50 and gap >= 5:
-                        # Lower darkness but clear winner (gap between filled and others)
+                    elif max_darkness >= 100 and gap >= 50:
+                        # Lower darkness but significant gap from other options
                         answers[str(q_num)] = values[max_idx]
                     else:
-                        # Too ambiguous - treat as blank to avoid false positives
+                        # Too ambiguous or unfilled - treat as blank
                         answers[str(q_num)] = ''
                 else:
                     answers[str(q_num)] = ''

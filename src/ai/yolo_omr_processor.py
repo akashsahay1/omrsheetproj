@@ -249,12 +249,13 @@ class YOLOOMRProcessor:
     # Block spacing: 425 - 186 = 239 pixels
     ANSWER_BLOCKS_ORIGINAL = {
         'blocks': [
-            {'origin': (171, 1449), 'questions': range(1, 11)},    # Block 1: Q1-10 (y+20)
-            {'origin': (410, 1449), 'questions': range(11, 21)},   # Block 2: Q11-20 (+239)
-            {'origin': (649, 1449), 'questions': range(21, 31)},   # Block 3: Q21-30 (+239)
-            {'origin': (888, 1449), 'questions': range(31, 41)},   # Block 4: Q31-40 (+239)
-            {'origin': (1127, 1449), 'questions': range(41, 51)},  # Block 5: Q41-50 (+239)
-            {'origin': (1365, 1451), 'questions': range(51, 61)},  # Block 6: Q51-60 (y+20)
+            # Shifted LEFT by 43px (one option_gap) to correct column alignment
+            {'origin': (128, 1449), 'questions': range(1, 11)},    # Block 1: Q1-10 (was 171)
+            {'origin': (367, 1449), 'questions': range(11, 21)},   # Block 2: Q11-20 (was 410)
+            {'origin': (606, 1449), 'questions': range(21, 31)},   # Block 3: Q21-30 (was 649)
+            {'origin': (845, 1449), 'questions': range(31, 41)},   # Block 4: Q31-40 (was 888)
+            {'origin': (1084, 1449), 'questions': range(41, 51)},  # Block 5: Q41-50 (was 1127)
+            {'origin': (1322, 1451), 'questions': range(51, 61)},  # Block 6: Q51-60 (was 1365)
         ],
         'row_gap': 61,       # (2006 - 1459) / 9 = 60.78
         'option_gap': 43,    # Horizontal gap between A,B,C,D (estimated from pixspy)
@@ -2132,6 +2133,15 @@ class YOLOOMRProcessor:
             block_x = block['origin'][0]
             block_y = block['origin'][1] if hasattr(self, '_original_size') else None
 
+            # Per-block offset estimation: search around the calculated position
+            # to find the best alignment for this specific block
+            if hasattr(self, '_original_size'):
+                best_x_off, best_y_off = self._estimate_block_offset_scaled(
+                    gray, block_x, block_y, row_gap, option_gap, bubble_size
+                )
+                block_x += best_x_off
+                block_y += best_y_off
+
             for q_idx, q_num in enumerate(block['questions']):
                 # Get Y position for this question
                 if hasattr(self, '_original_size'):
@@ -2249,6 +2259,113 @@ class YOLOOMRProcessor:
                     best_total_darkness = total_darkness
                     best_x_offset = x_off
                     best_y_offset = y_off
+
+        return (best_x_offset, best_y_offset)
+
+    def _estimate_block_offset_scaled(
+        self,
+        gray: np.ndarray,
+        origin_x: int,
+        origin_y: int,
+        row_gap: int,
+        col_gap: int,
+        bubble_size: Tuple[int, int]
+    ) -> Tuple[int, int]:
+        """Estimate optimal X/Y offset for a block using scaled coordinates.
+
+        Searches around the calculated origin position to find the offset
+        that maximizes the number of clearly filled bubbles (high darkness).
+        Uses moderate search range to avoid jumping to wrong grid positions.
+
+        Args:
+            gray: Grayscale image
+            origin_x: Calculated X origin for this block
+            origin_y: Calculated Y origin for this block
+            row_gap: Scaled row spacing
+            col_gap: Scaled column spacing
+            bubble_size: Scaled bubble size (width, height)
+
+        Returns:
+            (x_offset, y_offset) to adjust this block's origin
+        """
+        best_x_offset = 0
+        best_y_offset = 0
+        best_score = 0
+
+        bw, bh = bubble_size
+
+        # Moderate search range (-30 to +30) to avoid jumping to wrong grids
+        for y_off in range(-30, 31, 6):
+            for x_off in range(-30, 31, 6):
+                score = 0
+                filled_count = 0
+
+                # Sample ALL 10 rows to get better coverage
+                for row_idx in range(10):
+                    y = origin_y + y_off + row_idx * row_gap
+                    if y < 0 or y + bh >= gray.shape[0]:
+                        continue
+
+                    # Find the darkest option in this row
+                    row_max_darkness = 0
+                    for col_idx in range(4):
+                        x = origin_x + x_off + col_idx * col_gap
+                        if x < 0 or x + bw >= gray.shape[1]:
+                            continue
+
+                        bubble = gray[y:y+bh, x:x+bw]
+                        dark_pixels = np.sum(bubble < 50)
+                        if dark_pixels > row_max_darkness:
+                            row_max_darkness = dark_pixels
+
+                    # Score based on clear fills (>400 is definitely filled)
+                    if row_max_darkness > 400:
+                        score += row_max_darkness
+                        filled_count += 1
+
+                # Prefer positions with more clearly filled bubbles
+                if filled_count > 0:
+                    # Normalize by filled count to avoid bias toward more fills
+                    normalized_score = score + filled_count * 100
+                    if normalized_score > best_score:
+                        best_score = normalized_score
+                        best_x_offset = x_off
+                        best_y_offset = y_off
+
+        # Fine-tune with smaller step around best position
+        if best_score > 0:
+            coarse_x, coarse_y = best_x_offset, best_y_offset
+            for y_off in range(coarse_y - 4, coarse_y + 5, 2):
+                for x_off in range(coarse_x - 4, coarse_x + 5, 2):
+                    score = 0
+                    filled_count = 0
+
+                    for row_idx in range(10):
+                        y = origin_y + y_off + row_idx * row_gap
+                        if y < 0 or y + bh >= gray.shape[0]:
+                            continue
+
+                        row_max_darkness = 0
+                        for col_idx in range(4):
+                            x = origin_x + x_off + col_idx * col_gap
+                            if x < 0 or x + bw >= gray.shape[1]:
+                                continue
+
+                            bubble = gray[y:y+bh, x:x+bw]
+                            dark_pixels = np.sum(bubble < 50)
+                            if dark_pixels > row_max_darkness:
+                                row_max_darkness = dark_pixels
+
+                        if row_max_darkness > 400:
+                            score += row_max_darkness
+                            filled_count += 1
+
+                    if filled_count > 0:
+                        normalized_score = score + filled_count * 100
+                        if normalized_score > best_score:
+                            best_score = normalized_score
+                            best_x_offset = x_off
+                            best_y_offset = y_off
 
         return (best_x_offset, best_y_offset)
 
