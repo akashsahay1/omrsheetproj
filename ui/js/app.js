@@ -570,7 +570,7 @@ async function loadResults() {
                 <td>${r.unanswered}</td>
                 <td>${r.total_score}</td>
                 <td>${r.percentage}%</td>
-                <td class="${confClass}">${confidence}%</td>
+                <td class="${confClass}">${confidence.toFixed(1)}%</td>
             `;
 
             tbody.appendChild(row);
@@ -807,7 +807,7 @@ function renderResultsTable() {
             <td>${r.unanswered}</td>
             <td>${r.total_score}</td>
             <td>${r.percentage}%</td>
-            <td class="${confClass}">${confidence}%</td>
+            <td class="${confClass}">${confidence.toFixed(1)}%</td>
         `;
 
         tbody.appendChild(row);
