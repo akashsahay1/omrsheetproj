@@ -2151,18 +2151,25 @@ class YOLOOMRProcessor:
                     # Legacy: use row_positions array (with label row at index 0)
                     y = row_positions[q_idx + 1]
 
-                found_answer = ''
-
-                # Check options A, B, C, D
+                # Check ALL options A, B, C, D to detect multi-marked
+                filled_options = []
                 for opt_idx, option in enumerate(self.ANSWER_VALUES):
                     # block_x is top-left X of option A
                     x = block_x + opt_idx * option_gap
 
                     if self._is_bubble_filled_simple(gray, x, y, bubble_size):
-                        found_answer = option
-                        break  # First filled option wins
+                        filled_options.append(option)
 
-                answers[q_num] = found_answer
+                # Determine answer based on filled count
+                if len(filled_options) >= 2:
+                    # Multiple bubbles filled = MULTI
+                    answers[q_num] = 'MULTI'
+                elif len(filled_options) == 1:
+                    # Single bubble filled = valid answer
+                    answers[q_num] = filled_options[0]
+                else:
+                    # No bubble filled = unanswered
+                    answers[q_num] = ''
 
         return answers
 
@@ -2389,9 +2396,12 @@ class YOLOOMRProcessor:
             questions: List of question numbers
 
         Returns:
-            Dict mapping question number to answer
+            Dict mapping question number to answer (or 'MULTI' if multiple filled)
         """
         answers = {}
+
+        # Threshold for considering a bubble as filled
+        FILLED_THRESHOLD = 50  # Darkness value above which bubble is considered filled
 
         for row_idx, q_num in enumerate(questions):
             y = int(origin_y + row_idx * row_gap)
@@ -2407,19 +2417,27 @@ class YOLOOMRProcessor:
             max_darkness = max(darkness_values)
             max_idx = darkness_values.index(max_darkness)
 
-            # Calculate gap
+            # Calculate gap between darkest and second darkest
             sorted_darkness = sorted(darkness_values, reverse=True)
             gap = sorted_darkness[0] - sorted_darkness[1] if len(sorted_darkness) > 1 else max_darkness
 
-            # Optimized thresholds based on ground truth analysis:
-            # - High darkness (>=70): definitely filled
-            # - Lower darkness (>=50) with clear gap (>=5): likely filled
-            # - Otherwise: treat as blank to avoid false positives
-            if max_darkness >= 70:
+            # Count how many bubbles are filled (above threshold)
+            filled_indices = [i for i, d in enumerate(darkness_values) if d >= FILLED_THRESHOLD]
+
+            # Check for multi-marked: 2+ bubbles filled with similar darkness
+            # A bubble is considered filled if darkness >= 50
+            # If multiple bubbles are filled and gap between top two is small, it's multi-marked
+            if len(filled_indices) >= 2 and gap < 20:
+                # Multiple bubbles filled with similar darkness = MULTI
+                answers[q_num] = 'MULTI'
+            elif max_darkness >= 70:
+                # Single clearly filled bubble
                 answers[q_num] = 'ABCD'[max_idx]
             elif max_darkness >= 50 and gap >= 5:
+                # Filled bubble with clear gap from others
                 answers[q_num] = 'ABCD'[max_idx]
             else:
+                # No bubble clearly filled
                 answers[q_num] = ''
 
         return answers
@@ -2443,6 +2461,9 @@ class YOLOOMRProcessor:
     ) -> Dict[int, str]:
         """Fallback: detect answers using calibrated grid positions."""
         answers = {}
+
+        # Threshold for considering a bubble as filled
+        FILLED_THRESHOLD = 50
 
         # Use the calibrated grid configs from GridDetector
         block_idx = (questions[0] - 1) // 10
@@ -2476,8 +2497,14 @@ class YOLOOMRProcessor:
                     sorted_darkness = sorted(darkness_values, reverse=True)
                     gap = sorted_darkness[0] - sorted_darkness[1] if len(sorted_darkness) > 1 else max_darkness
 
-                    # Same optimized thresholds as main detection method
-                    if max_darkness >= 70:
+                    # Count how many bubbles are filled (above threshold)
+                    filled_indices = [i for i, d in enumerate(darkness_values) if d >= FILLED_THRESHOLD]
+
+                    # Check for multi-marked
+                    if len(filled_indices) >= 2 and gap < 20:
+                        # Multiple bubbles filled with similar darkness = MULTI
+                        answers[q_num] = 'MULTI'
+                    elif max_darkness >= 70:
                         answers[q_num] = 'ABCD'[max_idx]
                     elif max_darkness >= 50 and gap >= 5:
                         answers[q_num] = 'ABCD'[max_idx]
@@ -3347,7 +3374,7 @@ class YOLOOMRProcessor:
 
                 if detected:
                     if len(multi_marked) > 1:
-                        answers[q_num] = ''.join(multi_marked)
+                        answers[q_num] = 'MULTI'  # Use standard MULTI value for scorer
                         q_conf = 0.4  # Multi-marked reduces confidence
                     elif darkest_opt < len(self.ANSWER_VALUES):
                         answers[q_num] = self.ANSWER_VALUES[darkest_opt]
@@ -3468,7 +3495,7 @@ class YOLOOMRProcessor:
                             multi_marked.append(self.ANSWER_VALUES[opt_idx])
 
                     if len(multi_marked) > 1:
-                        answers[q_num] = ''.join(multi_marked)
+                        answers[q_num] = 'MULTI'  # Use standard MULTI value for scorer
                     else:
                         answers[q_num] = self.ANSWER_VALUES[max_idx.item()]
                 else:
@@ -3576,8 +3603,8 @@ class YOLOOMRProcessor:
 
                 if detected:
                     if len(multi_marked) > 1:
-                        # Multi-marked: record all marked options
-                        answers[q_num] = ''.join(multi_marked)
+                        # Multi-marked: use standard MULTI value for scorer
+                        answers[q_num] = 'MULTI'
                     elif darkest_opt < len(self.ANSWER_VALUES):
                         answers[q_num] = self.ANSWER_VALUES[darkest_opt]
                     else:
