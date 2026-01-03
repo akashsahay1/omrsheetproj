@@ -81,10 +81,13 @@ class DynamicGridDetector:
 
     def detect_answer_grids(self, gray: np.ndarray) -> List[DetectedGrid]:
         """
-        Detect answer grids using HoughCircles with fallback to fixed grid.
+        Detect answer grids using hybrid approach:
+        - Use HoughCircles to find the Y position of first row
+        - Use fixed calibrated X origins for each block
+        - Use fixed row_gap and col_gap
 
-        Primary method: Detect bubbles using HoughCircles and identify block structure.
-        Fallback: Use fixed calibrated grid positions if HoughCircles fails.
+        This is more reliable than pure HoughCircles because HoughCircles
+        often misses unfilled bubbles, making column detection unreliable.
 
         Args:
             gray: Grayscale image
@@ -92,14 +95,75 @@ class DynamicGridDetector:
         Returns:
             List of 6 DetectedGrid objects for answer blocks
         """
-        # Try HoughCircles-based detection first
-        grids = self._detect_answer_grids_hough(gray)
+        # Fixed calibrated grid parameters (calibrated from 41_645.jpg)
+        # Y=2214 is Q1 row, X origins are column A of each block
+        BLOCK_X_ORIGINS = [339, 680, 1011, 1347, 1684, 2024]
+        EXPECTED_Y = 2214
+        ROW_GAP = 93
+        COL_GAP = 64
+        BUBBLE_RADIUS = 14
 
-        # If HoughCircles fails, use fixed calibrated grid
-        if len(grids) < 6:
-            grids = self._create_fixed_grids()
+        # Try to find actual first row Y using HoughCircles
+        detected_y = self._find_first_row_y_hough(gray)
+
+        # Use detected Y if found and reasonable, otherwise use expected
+        if detected_y is not None and 2180 <= detected_y <= 2250:
+            origin_y = detected_y
+        else:
+            origin_y = EXPECTED_Y
+
+        # Create grids using fixed X origins and detected/expected Y
+        grids = []
+        for block_idx, origin_x in enumerate(BLOCK_X_ORIGINS):
+            grid = DetectedGrid(
+                origin=(origin_x, origin_y),
+                rows=10,
+                cols=4,
+                row_gap=ROW_GAP,
+                col_gap=COL_GAP,
+                bubble_radius=BUBBLE_RADIUS,
+                confidence=0.9,
+                field_type=f'answers_{block_idx*10+1}_{block_idx*10+10}'
+            )
+            grids.append(grid)
 
         return grids
+
+    def _find_first_row_y_hough(self, gray: np.ndarray) -> Optional[int]:
+        """
+        Find Y position of first answer row using HoughCircles.
+
+        Returns the Y coordinate of the first detected row in the answer area,
+        or None if detection fails.
+        """
+        # Detect circles
+        all_bubbles = self._detect_all_bubbles(gray)
+
+        if len(all_bubbles) < 50:
+            return None
+
+        # Filter to answer area (Y > 2180 to include Q1 row at Y~2214)
+        answer_bubbles = [(x, y, r) for x, y, r in all_bubbles
+                          if y > 2180 and 300 <= x <= 2200]
+
+        if len(answer_bubbles) < 10:
+            return None
+
+        # Cluster Y values to find rows
+        y_values = sorted(set(b[1] for b in answer_bubbles))
+        clusters = [[y_values[0]]]
+        for v in y_values[1:]:
+            if v - clusters[-1][-1] <= 30:
+                clusters[-1].append(v)
+            else:
+                clusters.append([v])
+
+        if not clusters:
+            return None
+
+        # Return first row center (should be Q1)
+        first_row_y = int(np.mean(clusters[0]))
+        return first_row_y
 
     def _detect_answer_grids_hough(self, gray: np.ndarray) -> List[DetectedGrid]:
         """Detect answer grids using HoughCircles."""
@@ -111,9 +175,9 @@ class DynamicGridDetector:
         if len(all_bubbles) < 100:
             return []
 
-        # Filter to answer area (Y > 2200, X in 300-2200)
+        # Filter to answer area (Y > 2180 to include Q1 row at Y~2214, X in 300-2200)
         answer_bubbles = [(x, y, r) for x, y, r in all_bubbles
-                          if y > 2200 and 300 <= x <= 2200]
+                          if y > 2180 and 300 <= x <= 2200]
 
         if len(answer_bubbles) < 50:
             return []
@@ -184,10 +248,10 @@ class DynamicGridDetector:
 
     def _create_fixed_grids(self) -> List[DetectedGrid]:
         """Create grids using fixed calibrated positions."""
-        BLOCK_X_ORIGINS = [328, 592, 924, 1262, 1598, 1937]
-        EXPECTED_Y = 2315
+        BLOCK_X_ORIGINS = [339, 680, 1011, 1347, 1684, 2024]
+        EXPECTED_Y = 2214
         ROW_GAP = 93
-        COL_GAP = 63
+        COL_GAP = 64
         BUBBLE_RADIUS = 14
 
         grids = []
