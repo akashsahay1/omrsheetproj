@@ -81,13 +81,10 @@ class DynamicGridDetector:
 
     def detect_answer_grids(self, gray: np.ndarray) -> List[DetectedGrid]:
         """
-        Detect answer grids using hybrid approach:
-        - Use HoughCircles to find the Y position of first row
-        - Use fixed calibrated X origins for each block
-        - Use fixed row_gap and col_gap
+        Detect answer grids dynamically using HoughCircles.
 
-        This is more reliable than pure HoughCircles because HoughCircles
-        often misses unfilled bubbles, making column detection unreliable.
+        Detects actual bubble positions to handle per-image alignment variations.
+        Falls back to calibrated positions if detection fails.
 
         Args:
             gray: Grayscale image
@@ -95,34 +92,103 @@ class DynamicGridDetector:
         Returns:
             List of 6 DetectedGrid objects for answer blocks
         """
-        # Fixed calibrated grid parameters (calibrated from 41_645.jpg)
-        # Y=2214 is Q1 row, X origins are column A of each block
-        BLOCK_X_ORIGINS = [339, 680, 1011, 1347, 1684, 2024]
-        EXPECTED_Y = 2214
+        # Try dynamic detection first
+        grids = self._detect_grids_dynamically(gray)
+
+        if len(grids) == 6:
+            return grids
+
+        # Fallback to calibrated positions if dynamic detection fails
+        return self._create_fixed_grids()
+
+    def _detect_grids_dynamically(self, gray: np.ndarray) -> List[DetectedGrid]:
+        """
+        Dynamically detect grid positions using HoughCircles.
+
+        Returns list of DetectedGrid or empty list if detection fails.
+        """
         ROW_GAP = 93
         COL_GAP = 64
         BUBBLE_RADIUS = 14
 
-        # Try to find actual first row Y using HoughCircles
-        detected_y = self._find_first_row_y_hough(gray)
+        # Detect all bubbles
+        all_bubbles = self._detect_all_bubbles(gray)
 
-        # Use detected Y if found and reasonable, otherwise use expected
-        if detected_y is not None and 2180 <= detected_y <= 2250:
-            origin_y = detected_y
-        else:
-            origin_y = EXPECTED_Y
+        if len(all_bubbles) < 100:
+            return []
 
-        # Create grids using fixed X origins and detected/expected Y
+        # Filter to answer area
+        answer_bubbles = [(x, y, r) for x, y, r in all_bubbles
+                          if 2150 < y < 3200 and 200 < x < 2300]
+
+        if len(answer_bubbles) < 50:
+            return []
+
+        # Find first row Y by clustering Y values
+        y_values = sorted(set(b[1] for b in answer_bubbles))
+        y_clusters = []
+        current = [y_values[0]]
+        for y in y_values[1:]:
+            if y - current[-1] <= 30:
+                current.append(y)
+            else:
+                y_clusters.append(current)
+                current = [y]
+        y_clusters.append(current)
+
+        if not y_clusters:
+            return []
+
+        first_row_y = int(np.mean(y_clusters[0]))
+
+        # Get bubbles in first row
+        first_row = [(x, y) for x, y, r in answer_bubbles
+                     if abs(y - first_row_y) < 30]
+        first_row.sort(key=lambda p: p[0])
+
+        if len(first_row) < 20:
+            return []
+
+        x_positions = [p[0] for p in first_row]
+
+        # Find Block 1 origin (first X position)
+        # Block 1 typically starts around X=300-350
+        block1_candidates = [x for x in x_positions if 280 < x < 400]
+        if not block1_candidates:
+            return []
+
+        block1_origin = min(block1_candidates)
+
+        # Calculate expected block offsets based on typical sheet layout
+        # Block spacing is approximately 340px between block origins
+        BLOCK_SPACING = 341
+
+        # Find actual origin for each block by looking near expected position
+        block_x_origins = []
+        for block_idx in range(6):
+            expected_x = block1_origin + block_idx * BLOCK_SPACING
+            # Find closest detected X position within 50px of expected
+            nearby = [x for x in x_positions if abs(x - expected_x) < 50]
+            if nearby:
+                block_x_origins.append(min(nearby))
+            else:
+                # Use expected if no detection nearby
+                block_x_origins.append(int(expected_x))
+
+        if len(block_x_origins) != 6:
+            return []
+
+        # Create grids
         grids = []
-        for block_idx, origin_x in enumerate(BLOCK_X_ORIGINS):
+        for block_idx, origin_x in enumerate(block_x_origins):
             grid = DetectedGrid(
-                origin=(origin_x, origin_y),
+                origin=(origin_x, first_row_y),
                 rows=10,
                 cols=4,
                 row_gap=ROW_GAP,
                 col_gap=COL_GAP,
                 bubble_radius=BUBBLE_RADIUS,
-                confidence=0.9,
+                confidence=0.85,
                 field_type=f'answers_{block_idx*10+1}_{block_idx*10+10}'
             )
             grids.append(grid)
