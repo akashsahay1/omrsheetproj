@@ -339,12 +339,15 @@ class FieldExtractor:
                     sorted_d = sorted(darkness_values, reverse=True)
                     gap = sorted_d[0] - sorted_d[1] if len(sorted_d) > 1 else max_darkness
 
-                    # Thresholds:
-                    # - Clearly filled bubbles: darkness >= 150
-                    # - Uncertain but likely filled: darkness >= 100 with gap >= 50
+                    # Thresholds (3 tiers to handle varying fill intensities):
+                    # 1. Clearly filled bubbles: darkness >= 150
+                    # 2. Medium filled: darkness >= 100 with gap >= 40
+                    # 3. Lightly filled: darkness >= 40 with gap >= 20 (for light markers)
                     if max_darkness >= 150:
                         answers[str(q_num)] = values[max_idx]
-                    elif max_darkness >= 100 and gap >= 50:
+                    elif max_darkness >= 100 and gap >= 40:
+                        answers[str(q_num)] = values[max_idx]
+                    elif max_darkness >= 40 and gap >= 20:
                         answers[str(q_num)] = values[max_idx]
 
         return answers
