@@ -79,12 +79,13 @@ class FieldExtractor:
         self.bubble_classifier = bubble_classifier or create_adaptive_classifier()
         self.grid_detector = grid_detector or GridDetector()
 
-    def extract_all_fields(self, gray: np.ndarray) -> OMRExtractionResult:
+    def extract_all_fields(self, gray: np.ndarray, color_image: np.ndarray = None) -> OMRExtractionResult:
         """
         Extract all fields from an aligned grayscale OMR image.
 
         Args:
             gray: Grayscale image aligned to canonical frame (2480x3507)
+            color_image: Optional BGR color image for batch detection
 
         Returns:
             OMRExtractionResult with all extracted values
@@ -112,7 +113,7 @@ class FieldExtractor:
         result.school_code = school_result.value
         result.school_code_confidence = school_result.confidence
 
-        answers_result = self.extract_answers(gray)
+        answers_result = self.extract_answers(gray, color_image)
         result.answers = {int(q): ans for q, ans in answers_result.items() if ans}
         result.answers_confidence = self._calculate_answers_confidence(answers_result)
 
@@ -275,12 +276,16 @@ class FieldExtractor:
 
         return ExtractionResult(value=school_code, confidence=avg_confidence)
 
-    def extract_answers(self, gray: np.ndarray) -> Dict[str, str]:
+    def extract_answers(self, gray: np.ndarray, color_image: np.ndarray = None) -> Dict[str, str]:
         """
         Extract all 60 answers using DYNAMIC grid detection.
 
         Uses DynamicGridDetector to find actual bubble positions instead of
         relying on static calibrated coordinates that may not match all images.
+
+        Args:
+            gray: Grayscale image
+            color_image: Optional BGR color image for batch detection (khoj/chayan)
 
         Returns dict mapping question number (str) to answer (A/B/C/D or empty).
         """
@@ -292,8 +297,9 @@ class FieldExtractor:
             answers[str(q)] = ''
 
         # Use dynamic grid detection to find actual bubble positions
+        # Pass color image for batch detection (khoj=red, chayan=blue)
         dynamic_detector = DynamicGridDetector()
-        detected_grids = dynamic_detector.detect_answer_grids(gray)
+        detected_grids = dynamic_detector.detect_answer_grids(gray, color_image)
 
         if not detected_grids:
             # Dynamic detection failed - return all blank

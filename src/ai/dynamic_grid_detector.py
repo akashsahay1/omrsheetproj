@@ -39,6 +39,25 @@ class DynamicGridDetector:
     4. Returning detected grids with their positions
     """
 
+    # Batch-specific grid parameters (detected by form COLOR, not file names)
+    # Red forms = wider row spacing, Blue forms = narrower row spacing
+    BATCH_PARAMS = {
+        'khoj': {
+            'block_spacing': 341,
+            'row_gap': 93,
+            'col_gap': 64,
+            'expected_y': 2214,
+            'block_x_origins': [339, 680, 1011, 1347, 1684, 2024],
+        },
+        'chayan': {
+            'block_spacing': 337,
+            'row_gap': 70,
+            'col_gap': 64,
+            'expected_y': 2197,
+            'block_x_origins': [332, 668, 1006, 1344, 1682, 2018],
+        }
+    }
+
     # Expected field characteristics for identification
     FIELD_SIGNATURES = {
         'name': {'rows': (20, 30), 'cols': (20, 30), 'position': 'top-left'},
@@ -52,6 +71,76 @@ class DynamicGridDetector:
     def __init__(self, debug: bool = False):
         self.debug = debug
         self._debug_images = {}
+        self._batch_type = 'khoj'  # Default to Khoj
+
+    def _detect_batch_type(self, color_image: np.ndarray) -> str:
+        """
+        Detect batch type (khoj or chayan) based on form color.
+
+        Khoj forms are red, Chayan forms are blue.
+        Samples multiple regions to handle edge cases where one region may be blank.
+
+        Args:
+            color_image: BGR color image
+
+        Returns:
+            'khoj' for red forms, 'chayan' for blue forms
+        """
+        if color_image is None or len(color_image.shape) != 3:
+            return 'khoj'  # Default if no color info
+
+        h, w = color_image.shape[:2]
+        if h < 1000 or w < 500:
+            return 'khoj'
+
+        # Sample from PRINTED FORM AREAS where students don't write
+        # - Answer grid area (Y > 2000) has printed row labels and borders
+        # - The form's printed color (red/blue) dominates these areas
+        # - Avoid the bubble centers where students fill
+        sample_regions = [
+            (2050, 2150, 260, 320),   # Left of Block 1 (row labels)
+            (2050, 2150, 600, 660),   # Left of Block 2 (row labels)
+            (2050, 2150, 940, 1000),  # Left of Block 3 (row labels)
+            (2900, 3000, 260, 320),   # Bottom of answer area (printed lines)
+            (400, 500, 150, 200),     # Form header area (printed text)
+        ]
+
+        total_blue = 0
+        total_red = 0
+        valid_samples = 0
+
+        for y1, y2, x1, x2 in sample_regions:
+            if y2 > h or x2 > w:
+                continue
+
+            region = color_image[y1:y2, x1:x2]
+            avg_intensity = np.mean(region)
+
+            # Skip mostly white regions (blank areas)
+            if avg_intensity > 250:
+                continue
+
+            avg_blue = np.mean(region[:, :, 0])
+            avg_red = np.mean(region[:, :, 2])
+
+            total_blue += avg_blue
+            total_red += avg_red
+            valid_samples += 1
+
+        # If no valid samples, try a larger central region
+        if valid_samples == 0:
+            central = color_image[h//3:2*h//3, w//4:3*w//4]
+            total_blue = np.mean(central[:, :, 0])
+            total_red = np.mean(central[:, :, 2])
+            valid_samples = 1
+
+        avg_blue = total_blue / valid_samples
+        avg_red = total_red / valid_samples
+
+        # Blue forms are Chayan, red forms are Khoj
+        if avg_blue > avg_red + 5:
+            return 'chayan'
+        return 'khoj'
 
     def detect_all_grids(self, gray: np.ndarray) -> Dict[str, DetectedGrid]:
         """
@@ -79,7 +168,7 @@ class DynamicGridDetector:
 
         return identified_grids
 
-    def detect_answer_grids(self, gray: np.ndarray) -> List[DetectedGrid]:
+    def detect_answer_grids(self, gray: np.ndarray, color_image: np.ndarray = None) -> List[DetectedGrid]:
         """
         Detect answer grids dynamically using HoughCircles.
 
@@ -88,27 +177,47 @@ class DynamicGridDetector:
 
         Args:
             gray: Grayscale image
+            color_image: Optional BGR color image for batch detection
 
         Returns:
             List of 6 DetectedGrid objects for answer blocks
         """
+        # Detect batch type if color image provided
+        if color_image is not None:
+            self._batch_type = self._detect_batch_type(color_image)
+
+        # Get batch-specific parameters
+        params = self.BATCH_PARAMS[self._batch_type]
+
         # Try dynamic detection first
-        grids = self._detect_grids_dynamically(gray)
+        grids = self._detect_grids_dynamically(gray, params)
 
         if len(grids) == 6:
             return grids
 
         # Fallback to calibrated positions if dynamic detection fails
-        return self._create_fixed_grids()
+        return self._create_fixed_grids(params)
 
-    def _detect_grids_dynamically(self, gray: np.ndarray) -> List[DetectedGrid]:
+    def _detect_grids_dynamically(self, gray: np.ndarray, params: dict = None) -> List[DetectedGrid]:
         """
         Dynamically detect grid positions using HoughCircles.
 
+        Uses batch-specific row_gap from params (detected by form color) since
+        dynamic row_gap calculation is less reliable than color-based batch detection.
+
+        Args:
+            gray: Grayscale image
+            params: Batch-specific parameters dict (detected by form color)
+
         Returns list of DetectedGrid or empty list if detection fails.
         """
-        ROW_GAP = 93
-        COL_GAP = 64
+        # Use provided params - these are based on form color detection
+        if params is None:
+            # No color info available - use reasonable defaults
+            params = {'row_gap': 90, 'col_gap': 64, 'block_spacing': 340}
+
+        ROW_GAP = params.get('row_gap', 90)
+        COL_GAP = params.get('col_gap', 64)
         BUBBLE_RADIUS = 14
 
         # Detect all bubbles
@@ -124,7 +233,7 @@ class DynamicGridDetector:
         if len(answer_bubbles) < 50:
             return []
 
-        # Find first row Y by clustering Y values
+        # Find rows by clustering Y values
         y_values = sorted(set(b[1] for b in answer_bubbles))
         y_clusters = []
         current = [y_values[0]]
@@ -149,33 +258,42 @@ class DynamicGridDetector:
         if len(first_row) < 20:
             return []
 
-        x_positions = [p[0] for p in first_row]
+        x_positions = sorted(set(p[0] for p in first_row))
 
-        # Find Block 1 origin (first X position)
-        # Block 1 typically starts around X=300-350
-        block1_candidates = [x for x in x_positions if 280 < x < 400]
-        if not block1_candidates:
-            return []
-
-        block1_origin = min(block1_candidates)
-
-        # Calculate expected block offsets based on typical sheet layout
-        # Block spacing is approximately 340px between block origins
-        BLOCK_SPACING = 341
-
-        # Find actual origin for each block by looking near expected position
+        # Find block boundaries by detecting large X gaps (gaps between blocks > 80px)
+        # Columns within a block are ~64px apart, blocks are ~340px apart
         block_x_origins = []
-        for block_idx in range(6):
-            expected_x = block1_origin + block_idx * BLOCK_SPACING
-            # Find closest detected X position within 50px of expected
-            nearby = [x for x in x_positions if abs(x - expected_x) < 50]
-            if nearby:
-                block_x_origins.append(min(nearby))
-            else:
-                # Use expected if no detection nearby
-                block_x_origins.append(int(expected_x))
+        prev_x = x_positions[0]
+        block_x_origins.append(prev_x)
 
-        if len(block_x_origins) != 6:
+        for x in x_positions[1:]:
+            gap = x - prev_x
+            if gap > 80:  # Large gap = new block
+                block_x_origins.append(x)
+            prev_x = x
+
+        # Calculate dynamic BLOCK_SPACING if we found multiple blocks
+        if len(block_x_origins) >= 2:
+            block_gaps = [block_x_origins[i+1] - block_x_origins[i] for i in range(len(block_x_origins)-1)]
+            BLOCK_SPACING = int(np.median(block_gaps))
+        else:
+            BLOCK_SPACING = params.get('block_spacing', 340)
+
+        # If we found fewer than 6 blocks, extrapolate the missing ones
+        if len(block_x_origins) < 6 and len(block_x_origins) >= 1:
+            block1_origin = block_x_origins[0]
+            # Recalculate all 6 block origins using detected spacing
+            block_x_origins = []
+            for block_idx in range(6):
+                expected_x = block1_origin + block_idx * BLOCK_SPACING
+                # Find closest detected X position within 50px of expected
+                nearby = [x for x in x_positions if abs(x - expected_x) < 50]
+                if nearby:
+                    block_x_origins.append(min(nearby))
+                else:
+                    block_x_origins.append(int(expected_x))
+
+        if len(block_x_origins) < 6:
             return []
 
         # Create grids
@@ -312,12 +430,20 @@ class DynamicGridDetector:
 
         return answer_grids[:6]
 
-    def _create_fixed_grids(self) -> List[DetectedGrid]:
-        """Create grids using fixed calibrated positions."""
-        BLOCK_X_ORIGINS = [339, 680, 1011, 1347, 1684, 2024]
-        EXPECTED_Y = 2214
-        ROW_GAP = 93
-        COL_GAP = 64
+    def _create_fixed_grids(self, params: dict = None) -> List[DetectedGrid]:
+        """Create grids using fixed calibrated positions.
+
+        Args:
+            params: Batch-specific parameters dict
+        """
+        # Use provided params or default to Khoj
+        if params is None:
+            params = self.BATCH_PARAMS['khoj']
+
+        BLOCK_X_ORIGINS = params['block_x_origins']
+        EXPECTED_Y = params['expected_y']
+        ROW_GAP = params['row_gap']
+        COL_GAP = params['col_gap']
         BUBBLE_RADIUS = 14
 
         grids = []
