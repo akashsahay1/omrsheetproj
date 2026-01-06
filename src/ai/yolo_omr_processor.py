@@ -275,14 +275,15 @@ class YOLOOMRProcessor:
         {'origin': (1645, 2111), 'questions': range(41, 51)},  # Block 5: Q41-50 (+346)
         {'origin': (1991, 2111), 'questions': range(51, 61)},  # Block 6: Q51-60 (+346)
     ]
-    # Chayan batch (39_*.jpg) has different alignment
+    # Chayan batch (38_*, 39_*.jpg) has different alignment
+    # X origins shifted LEFT by 65 pixels (one column) to fix detection
     ANSWER_BLOCKS_CHAYAN = [
-        {'origin': (252, 2112), 'questions': range(1, 11)},    # Block 1: Q1-10
-        {'origin': (612, 2112), 'questions': range(11, 21)},   # Block 2: Q11-20
-        {'origin': (972, 2112), 'questions': range(21, 31)},   # Block 3: Q21-30
-        {'origin': (1332, 2112), 'questions': range(31, 41)},  # Block 4: Q31-40
-        {'origin': (1692, 2112), 'questions': range(41, 51)},  # Block 5: Q41-50
-        {'origin': (2052, 2112), 'questions': range(51, 61)},  # Block 6: Q51-60
+        {'origin': (187, 2112), 'questions': range(1, 11)},    # Block 1: Q1-10
+        {'origin': (547, 2112), 'questions': range(11, 21)},   # Block 2: Q11-20
+        {'origin': (907, 2112), 'questions': range(21, 31)},   # Block 3: Q21-30
+        {'origin': (1267, 2112), 'questions': range(31, 41)},  # Block 4: Q31-40
+        {'origin': (1627, 2112), 'questions': range(41, 51)},  # Block 5: Q41-50
+        {'origin': (1987, 2112), 'questions': range(51, 61)},  # Block 6: Q51-60
     ]
     ANSWER_BUBBLE_SIZE = (28, 28)
     ANSWER_OPTION_GAP = 65   # Horizontal gap between A,B,C,D options (was 70)
@@ -2204,7 +2205,11 @@ class YOLOOMRProcessor:
         ROW_GAP = 93  # Vertical spacing between questions
         COL_GAP = 63  # Horizontal spacing between A/B/C/D options
 
-        # Calibrated block origins (baseline)
+        # Use batch-specific coordinates
+        is_chayan = getattr(self, '_is_chayan_batch', False)
+
+        # Use same baseline coordinates for both Khoj and Chayan
+        # Offset estimation will fine-tune the position for each form
         BLOCK_CONFIGS = [
             {'origin': (324, 2221), 'questions': list(range(1, 11))},
             {'origin': (660, 2221), 'questions': list(range(11, 21))},
@@ -2219,6 +2224,7 @@ class YOLOOMRProcessor:
             questions = block['questions']
 
             # Estimate offset for THIS block specifically
+            # Both Khoj and Chayan use dynamic offset estimation to find correct grid
             x_offset, y_offset = self._estimate_block_offset(
                 gray, origin_x, origin_y, ROW_GAP, COL_GAP
             )
@@ -2263,8 +2269,9 @@ class YOLOOMRProcessor:
         best_total_darkness = 0
 
         # Search in a grid around the calibrated position
-        for y_off in range(-20, 21, 5):
-            for x_off in range(-20, 21, 5):
+        # Expanded range to ±60px to handle cross-batch alignment variations
+        for y_off in range(-30, 31, 10):
+            for x_off in range(-60, 61, 10):
                 total_darkness = 0
 
                 # Sample all 4 options in first row
