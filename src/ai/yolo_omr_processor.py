@@ -584,8 +584,8 @@ class YOLOOMRProcessor:
             grid_detector = GridDetector()
             field_extractor = FieldExtractor(bubble_classifier, grid_detector)
 
-            # Step 3: Extract all fields
-            extraction_result = field_extractor.extract_all_fields(gray)
+            # Step 3: Extract all fields (pass color image for batch type detection)
+            extraction_result = field_extractor.extract_all_fields(gray, aligned)
 
             # Step 4: Convert to OMRResult
             result = OMRResult(
