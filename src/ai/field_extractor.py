@@ -79,6 +79,80 @@ class FieldExtractor:
         self.bubble_classifier = bubble_classifier or create_adaptive_classifier()
         self.grid_detector = grid_detector or GridDetector()
 
+    def _adaptive_detect_darkest_row(
+        self,
+        gray: np.ndarray,
+        base_x: int,
+        base_y: int,
+        num_rows: int,
+        row_gap: int,
+        bubble_size: int = 28,
+        search_range: int = 6,
+        values: List[str] = None
+    ) -> Tuple[str, float]:
+        """
+        Adaptively detect the darkest row in a column with position search.
+
+        Searches ±search_range pixels around expected positions to handle
+        slight alignment variations between scanned images.
+
+        Args:
+            gray: Grayscale image
+            base_x: Expected X position
+            base_y: Y position of first row
+            num_rows: Number of rows to check
+            row_gap: Gap between rows
+            bubble_size: Size of bubble region
+            search_range: Pixels to search around expected position
+            values: List of values corresponding to rows
+
+        Returns:
+            (detected_value, confidence) or ('', 0.0) if nothing detected
+        """
+        row_darkness = []
+
+        for row in range(num_rows):
+            expected_y = base_y + row * row_gap
+
+            # Search around expected position for darkest region
+            best_darkness = 255
+            for dx in range(-search_range, search_range + 1, 3):
+                for dy in range(-search_range, search_range + 1, 3):
+                    x = base_x + dx
+                    y = expected_y + dy
+
+                    if x < 0 or y < 0 or x + bubble_size > gray.shape[1] or y + bubble_size > gray.shape[0]:
+                        continue
+
+                    region = gray[y:y+bubble_size, x:x+bubble_size]
+                    avg = np.mean(region)
+
+                    if avg < best_darkness:
+                        best_darkness = avg
+
+            row_darkness.append(best_darkness)
+
+        if not row_darkness:
+            return ('', 0.0)
+
+        min_darkness = min(row_darkness)
+        darkest_row = row_darkness.index(min_darkness)
+
+        # Calculate gap to 2nd darkest
+        sorted_darkness = sorted(row_darkness)
+        gap = sorted_darkness[1] - sorted_darkness[0] if len(sorted_darkness) > 1 else 50
+
+        # Use relative darkness with lenient thresholds
+        if min_darkness < 190 and gap > 12:
+            value = values[darkest_row] if values else str(darkest_row)
+            confidence = min(1.0, gap / 40)
+            return (value, confidence)
+        elif min_darkness < 160:
+            value = values[darkest_row] if values else str(darkest_row)
+            return (value, 1.0 - min_darkness / 255)
+
+        return ('', 0.0)
+
     def extract_all_fields(self, gray: np.ndarray, color_image: np.ndarray = None) -> OMRExtractionResult:
         """
         Extract all fields from an aligned grayscale OMR image.
@@ -191,27 +265,58 @@ class FieldExtractor:
         # Expected 25 columns for name
         for col in range(min(25, grid.cols)):
             if batch_type == 'chayan':
-                # Use direct threshold detection with calibrated X positions
-                x = CHAYAN_COL_X[col] if col < len(CHAYAN_COL_X) else CHAYAN_COL_X[-1] + (col - len(CHAYAN_COL_X) + 1) * 51
-                darkest_val = 255
-                darkest_row = -1
+                # Adaptive detection: search ±SEARCH_RANGE pixels for best match
+                SEARCH_RANGE = 8  # Pixels to search in X and Y
+                base_x = CHAYAN_COL_X[col] if col < len(CHAYAN_COL_X) else CHAYAN_COL_X[-1] + (col - len(CHAYAN_COL_X) + 1) * 51
 
+                # Collect darkness values for all 26 rows with adaptive X search
+                row_darkness = []
                 for row in range(26):
-                    y = int(CHAYAN_ORIGIN_Y + row * CHAYAN_ROW_GAP)
+                    base_y = int(CHAYAN_ORIGIN_Y + row * CHAYAN_ROW_GAP)
 
-                    if x < 0 or y < 0 or x + CHAYAN_BUBBLE_SIZE > gray.shape[1] or y + CHAYAN_BUBBLE_SIZE > gray.shape[0]:
-                        continue
+                    # Search around expected position for darkest region
+                    best_darkness = 255
+                    for dx in range(-SEARCH_RANGE, SEARCH_RANGE + 1, 4):
+                        for dy in range(-SEARCH_RANGE, SEARCH_RANGE + 1, 4):
+                            x = base_x + dx
+                            y = base_y + dy
 
-                    region = gray[y:y+CHAYAN_BUBBLE_SIZE, x:x+CHAYAN_BUBBLE_SIZE]
-                    avg = np.mean(region)
+                            if x < 0 or y < 0 or x + CHAYAN_BUBBLE_SIZE > gray.shape[1] or y + CHAYAN_BUBBLE_SIZE > gray.shape[0]:
+                                continue
 
-                    if avg < darkest_val:
-                        darkest_val = avg
-                        darkest_row = row
+                            region = gray[y:y+CHAYAN_BUBBLE_SIZE, x:x+CHAYAN_BUBBLE_SIZE]
+                            avg = np.mean(region)
 
-                if darkest_row >= 0 and darkest_val < 180:
-                    result_chars.append(values[darkest_row])
-                    confidences.append(1.0 - darkest_val / 255)
+                            if avg < best_darkness:
+                                best_darkness = avg
+
+                    row_darkness.append(best_darkness)
+
+                # Find FIRST filled row (topmost), not darkest
+                # If user filled multiple bubbles, use the first one
+                if row_darkness:
+                    # Calculate threshold: a filled bubble should be notably darker
+                    # than the average unfilled bubble
+                    sorted_darkness = sorted(row_darkness)
+                    median_darkness = sorted_darkness[len(sorted_darkness) // 2]
+
+                    # Threshold: must be at least 25 points darker than median, or below 180
+                    fill_threshold = min(median_darkness - 25, 180)
+
+                    # Find FIRST row that meets the filled threshold (top to bottom)
+                    first_filled_row = None
+                    for row_idx, darkness in enumerate(row_darkness):
+                        if darkness < fill_threshold:
+                            first_filled_row = row_idx
+                            break
+
+                    if first_filled_row is not None:
+                        result_chars.append(values[first_filled_row])
+                        # Confidence based on how dark the bubble is
+                        confidences.append(1.0 - row_darkness[first_filled_row] / 255)
+                    else:
+                        result_chars.append(' ')
+                        confidences.append(0.0)
                 else:
                     result_chars.append(' ')
                     confidences.append(0.0)
@@ -264,27 +369,14 @@ class FieldExtractor:
 
         for col in range(3):
             if batch_type == 'chayan':
-                # Direct threshold detection for Chayan
+                # Adaptive detection for Chayan
                 x = int(origin[0] + col * col_gap)
-                darkest_val = 255
-                darkest_row = -1
-
-                for row in range(10):
-                    y = int(origin[1] + row * row_gap)
-                    if y + bubble_size > gray.shape[0] or x + bubble_size > gray.shape[1]:
-                        continue
-                    region = gray[y:y+bubble_size, x:x+bubble_size]
-                    avg = np.mean(region)
-                    if avg < darkest_val:
-                        darkest_val = avg
-                        darkest_row = row
-
-                if darkest_row >= 0 and darkest_val < 180:
-                    result_digits.append(values[darkest_row])
-                    confidences.append(1.0 - darkest_val / 255)
-                else:
-                    result_digits.append('')
-                    confidences.append(0.0)
+                digit, conf = self._adaptive_detect_darkest_row(
+                    gray, x, origin[1], 10, row_gap, bubble_size,
+                    search_range=6, values=values
+                )
+                result_digits.append(digit)
+                confidences.append(conf)
             else:
                 grid = self.grid_detector.detect_grid(gray, 'roll_number')
                 bubble_images = self._extract_column_bubbles(gray, grid, col)
@@ -312,28 +404,16 @@ class FieldExtractor:
         values = FIELD_VALUES['class']
 
         if batch_type == 'chayan':
-            # Chayan-specific calibration
+            # Adaptive detection for Chayan
             origin = (1775, 1266)
             row_gap = 50
             bubble_size = 28
 
-            darkest_val = 255
-            darkest_row = -1
-
-            for row in range(8):
-                x = origin[0]
-                y = int(origin[1] + row * row_gap)
-                if y + bubble_size > gray.shape[0] or x + bubble_size > gray.shape[1]:
-                    continue
-                region = gray[y:y+bubble_size, x:x+bubble_size]
-                avg = np.mean(region)
-                if avg < darkest_val:
-                    darkest_val = avg
-                    darkest_row = row
-
-            if darkest_row >= 0 and darkest_val < 180:
-                return ExtractionResult(value=values[darkest_row], confidence=1.0 - darkest_val / 255)
-            return ExtractionResult(value="", confidence=0.0)
+            class_val, conf = self._adaptive_detect_darkest_row(
+                gray, origin[0], origin[1], 8, row_gap, bubble_size,
+                search_range=6, values=values
+            )
+            return ExtractionResult(value=class_val, confidence=conf)
         else:
             grid = self.grid_detector.detect_grid(gray, 'class')
             if grid is None:
@@ -354,28 +434,16 @@ class FieldExtractor:
         values = FIELD_VALUES['section']
 
         if batch_type == 'chayan':
-            # Chayan-specific calibration
+            # Adaptive detection for Chayan
             origin = (1920, 1252)
             row_gap = 54
             bubble_size = 28
 
-            darkest_val = 255
-            darkest_row = -1
-
-            for row in range(8):
-                x = origin[0]
-                y = int(origin[1] + row * row_gap)
-                if y + bubble_size > gray.shape[0] or x + bubble_size > gray.shape[1]:
-                    continue
-                region = gray[y:y+bubble_size, x:x+bubble_size]
-                avg = np.mean(region)
-                if avg < darkest_val:
-                    darkest_val = avg
-                    darkest_row = row
-
-            if darkest_row >= 0 and darkest_val < 180:
-                return ExtractionResult(value=values[darkest_row], confidence=1.0 - darkest_val / 255)
-            return ExtractionResult(value="", confidence=0.0)
+            section_val, conf = self._adaptive_detect_darkest_row(
+                gray, origin[0], origin[1], 8, row_gap, bubble_size,
+                search_range=6, values=values
+            )
+            return ExtractionResult(value=section_val, confidence=conf)
         else:
             grid = self.grid_detector.detect_grid(gray, 'section')
             if grid is None:
@@ -413,27 +481,14 @@ class FieldExtractor:
 
         for col in range(3):
             if batch_type == 'chayan':
-                # Direct threshold detection for Chayan
+                # Adaptive detection for Chayan
                 x = int(origin[0] + col * col_gap)
-                darkest_val = 255
-                darkest_row = -1
-
-                for row in range(10):
-                    y = int(origin[1] + row * row_gap)
-                    if y + bubble_size > gray.shape[0] or x + bubble_size > gray.shape[1]:
-                        continue
-                    region = gray[y:y+bubble_size, x:x+bubble_size]
-                    avg = np.mean(region)
-                    if avg < darkest_val:
-                        darkest_val = avg
-                        darkest_row = row
-
-                if darkest_row >= 0 and darkest_val < 180:
-                    result_digits.append(values[darkest_row])
-                    confidences.append(1.0 - darkest_val / 255)
-                else:
-                    result_digits.append('')
-                    confidences.append(0.0)
+                digit, conf = self._adaptive_detect_darkest_row(
+                    gray, x, origin[1], 10, row_gap, bubble_size,
+                    search_range=6, values=values
+                )
+                result_digits.append(digit)
+                confidences.append(conf)
             else:
                 grid = self.grid_detector.detect_grid(gray, 'school_code')
                 bubble_images = self._extract_column_bubbles(gray, grid, col)
@@ -721,15 +776,26 @@ class FieldExtractor:
         import re
         name = re.sub(r'\s+', ' ', name)
 
-        # Remove trailing single characters (often artifacts)
+        # Keep all words - single letters can be valid initials in names
+        # Only remove trailing artifacts if they look like noise
         words = name.split()
-        cleaned_words = []
-        for word in words:
-            # Keep words of length >= 2, or common single letters
-            if len(word) >= 2 or word in ['A', 'I']:
-                cleaned_words.append(word)
 
-        return ' '.join(cleaned_words)
+        if len(words) > 1:
+            # Count trailing single-letter words
+            trailing_singles = 0
+            for w in reversed(words):
+                if len(w) == 1:
+                    trailing_singles += 1
+                else:
+                    break
+
+            # Only remove if:
+            # 1. There are 3+ trailing singles AND
+            # 2. They don't make up the entire name (keep at least first word)
+            if trailing_singles >= 3 and trailing_singles < len(words):
+                words = words[:-trailing_singles]
+
+        return ' '.join(words)
 
     def _calculate_answers_confidence(self, answers: Dict[str, str]) -> float:
         """Calculate overall confidence for answers extraction (0-100 scale)."""

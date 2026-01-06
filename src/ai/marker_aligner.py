@@ -61,7 +61,7 @@ class MarkerAligner:
         self,
         marker_template_path: Optional[str] = None,
         min_marker_area: int = 300,
-        max_marker_area: int = 8000
+        max_marker_area: int = 25000  # Increased to handle merged markers
     ):
         """
         Initialize the marker aligner.
@@ -104,6 +104,13 @@ class MarkerAligner:
             # Detect corners using multiple methods
             corners = self._detect_corners(gray)
 
+            if len(corners) == 3:
+                # Try to estimate missing corner from 3 detected ones first
+                # This is more reliable than contour/edge detection
+                estimated = self._estimate_missing_corners(corners, w, h)
+                if len(estimated) == 4:
+                    corners = estimated
+
             if len(corners) < 4:
                 # Try alternative detection
                 corners = self._detect_corners_contour(gray)
@@ -111,6 +118,10 @@ class MarkerAligner:
             if len(corners) < 4:
                 # Fall back to edge-based detection
                 corners = self._detect_corners_edge(gray)
+
+            if len(corners) < 4:
+                # Try to estimate missing corners from detected ones
+                corners = self._estimate_missing_corners(corners, w, h)
 
             if len(corners) < 4:
                 # Final fallback: simple resize without perspective correction
@@ -180,6 +191,14 @@ class MarkerAligner:
                         cy = int(M["m01"] / M["m00"])
                         marker_candidates.append((cx, cy, area))
 
+        # Filter out abnormally large markers (likely logos/text, not actual markers)
+        # Keep only markers with area < 3x the median area
+        if len(marker_candidates) >= 3:
+            areas = sorted([m[2] for m in marker_candidates])
+            median_area = areas[len(areas) // 2]
+            max_allowed = median_area * 5  # Allow up to 5x median
+            marker_candidates = [(x, y, a) for x, y, a in marker_candidates if a < max_allowed]
+
         # Select the 4 markers closest to the corners
         h, w = gray.shape
         corner_regions = [
@@ -189,20 +208,138 @@ class MarkerAligner:
             (0, h)            # Bottom-left
         ]
 
+        # Typical marker area range (Vidya Bharti forms have markers ~500-700 pixels)
+        TYPICAL_AREA_MIN = 400
+        TYPICAL_AREA_MAX = 1500
+
         for corner_x, corner_y in corner_regions:
             best_marker = None
-            best_dist = float('inf')
+            best_score = float('inf')
 
             for mx, my, area in marker_candidates:
                 dist = np.sqrt((mx - corner_x)**2 + (my - corner_y)**2)
-                if dist < best_dist and dist < max(w, h) * 0.3:  # Within 30% of image
-                    best_dist = dist
-                    best_marker = (mx, my)
+                # Strict corner region: within 20% of image dimension
+                if dist < max(w, h) * 0.20:
+                    # Prefer markers with typical area over abnormally large ones
+                    # Score = distance + penalty for non-typical area
+                    if TYPICAL_AREA_MIN <= area <= TYPICAL_AREA_MAX:
+                        area_penalty = 0
+                    else:
+                        # Large penalty for markers outside typical range
+                        area_penalty = abs(area - (TYPICAL_AREA_MIN + TYPICAL_AREA_MAX) / 2) * 0.5
+
+                    score = dist + area_penalty
+                    if score < best_score:
+                        best_score = score
+                        best_marker = (mx, my)
 
             if best_marker:
                 corners.append(best_marker)
 
+        # Validate corners form a proper quadrilateral
+        if len(corners) == 4:
+            if not self._validate_corners(corners, w, h):
+                # Invalid corners, return empty to trigger fallback
+                return []
+
         return corners
+
+    def _validate_corners(self, corners: List[Tuple[int, int]], w: int, h: int) -> bool:
+        """Validate that detected corners form a reasonable quadrilateral."""
+        if len(corners) != 4:
+            return False
+
+        # Order corners for validation
+        pts = np.array(corners, dtype=np.float32)
+        s = pts.sum(axis=1)
+        d = np.diff(pts, axis=1).flatten()
+
+        tl = pts[np.argmin(s)]
+        br = pts[np.argmax(s)]
+        tr = pts[np.argmin(d)]
+        bl = pts[np.argmax(d)]
+
+        # Check 1: TL should be in top-left quadrant (strict: within 15% of corner)
+        if tl[0] > w * 0.15 or tl[1] > h * 0.25:
+            return False
+
+        # Check 2: BR should be in bottom-right quadrant
+        if br[0] < w * 0.85 or br[1] < h * 0.75:
+            return False
+
+        # Check 3: TR should be right side, top half
+        if tr[0] < w * 0.85 or tr[1] > h * 0.25:
+            return False
+
+        # Check 4: BL should be left side, bottom half
+        if bl[0] > w * 0.15 or bl[1] < h * 0.75:
+            return False
+
+        # Check 5: Width and height should be reasonable (at least 80% of image)
+        width = np.sqrt((tr[0] - tl[0])**2 + (tr[1] - tl[1])**2)
+        height = np.sqrt((bl[0] - tl[0])**2 + (bl[1] - tl[1])**2)
+
+        if width < w * 0.8 or height < h * 0.7:
+            return False
+
+        return True
+
+    def _estimate_missing_corners(self, corners: List[Tuple[int, int]], w: int, h: int) -> List[Tuple[int, int]]:
+        """Estimate missing corners from detected ones, assuming rectangular form."""
+        if len(corners) >= 4:
+            return corners
+
+        if len(corners) < 3:
+            # Need at least 3 corners to estimate the 4th
+            return corners
+
+        # Identify which corners we have based on position
+        corner_regions = {
+            'TL': (0, w * 0.3, 0, h * 0.3),
+            'TR': (w * 0.7, w, 0, h * 0.3),
+            'BL': (0, w * 0.3, h * 0.7, h),
+            'BR': (w * 0.7, w, h * 0.7, h)
+        }
+
+        detected = {'TL': None, 'TR': None, 'BL': None, 'BR': None}
+        for cx, cy in corners:
+            for name, (x1, x2, y1, y2) in corner_regions.items():
+                if x1 <= cx <= x2 and y1 <= cy <= y2:
+                    detected[name] = (cx, cy)
+                    break
+
+        # Count detected corners
+        found = [k for k, v in detected.items() if v is not None]
+        missing = [k for k, v in detected.items() if v is None]
+
+        if len(found) == 3 and len(missing) == 1:
+            # Estimate the missing corner
+            miss = missing[0]
+
+            if miss == 'TL' and detected['TR'] and detected['BL'] and detected['BR']:
+                # TL = TR + BL - BR (parallelogram rule)
+                tr, bl, br = detected['TR'], detected['BL'], detected['BR']
+                tl = (tr[0] + bl[0] - br[0], tr[1] + bl[1] - br[1])
+                detected['TL'] = tl
+
+            elif miss == 'TR' and detected['TL'] and detected['BL'] and detected['BR']:
+                tl, bl, br = detected['TL'], detected['BL'], detected['BR']
+                tr = (tl[0] + br[0] - bl[0], tl[1] + br[1] - bl[1])
+                detected['TR'] = tr
+
+            elif miss == 'BL' and detected['TL'] and detected['TR'] and detected['BR']:
+                tl, tr, br = detected['TL'], detected['TR'], detected['BR']
+                bl = (tl[0] + br[0] - tr[0], tl[1] + br[1] - tr[1])
+                detected['BL'] = bl
+
+            elif miss == 'BR' and detected['TL'] and detected['TR'] and detected['BL']:
+                tl, tr, bl = detected['TL'], detected['TR'], detected['BL']
+                br = (tr[0] + bl[0] - tl[0], tr[1] + bl[1] - tl[1])
+                detected['BR'] = br
+
+        # Return all detected corners
+        result = [v for v in detected.values() if v is not None]
+        return result
 
     def _detect_corners_contour(self, gray: np.ndarray) -> List[Tuple[int, int]]:
         """Detect page corners using contour detection."""

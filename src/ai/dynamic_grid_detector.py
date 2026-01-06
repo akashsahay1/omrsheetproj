@@ -50,11 +50,11 @@ class DynamicGridDetector:
             'block_x_origins': [339, 680, 1011, 1347, 1684, 2024],
         },
         'chayan': {
-            'block_spacing': 337,
-            'row_gap': 70,
-            'col_gap': 64,
-            'expected_y': 2197,
-            'block_x_origins': [332, 668, 1006, 1344, 1682, 2018],
+            'block_spacing': 338,
+            'row_gap': 94,  # Calibrated from pixspy (was 70)
+            'col_gap': 63,  # Calibrated from pixspy (was 64)
+            'expected_y': 2185,  # Calibrated from pixspy (was 2197)
+            'block_x_origins': [319, 657, 995, 1332, 1670, 2007],  # Calibrated from pixspy
         }
     }
 
@@ -97,12 +97,18 @@ class DynamicGridDetector:
         # - Answer grid area (Y > 2000) has printed row labels and borders
         # - The form's printed color (red/blue) dominates these areas
         # - Avoid the bubble centers where students fill
+        # Added more sample regions for better robustness
         sample_regions = [
             (2050, 2150, 260, 320),   # Left of Block 1 (row labels)
             (2050, 2150, 600, 660),   # Left of Block 2 (row labels)
             (2050, 2150, 940, 1000),  # Left of Block 3 (row labels)
+            (2050, 2150, 1280, 1340), # Left of Block 4 (row labels)
+            (2050, 2150, 1620, 1680), # Left of Block 5 (row labels)
             (2900, 3000, 260, 320),   # Bottom of answer area (printed lines)
+            (2900, 3000, 1000, 1060), # Bottom center
             (400, 500, 150, 200),     # Form header area (printed text)
+            (600, 700, 100, 200),     # Name field header area
+            (1200, 1300, 1500, 1600), # Right side field labels
         ]
 
         total_blue = 0
@@ -116,8 +122,8 @@ class DynamicGridDetector:
             region = color_image[y1:y2, x1:x2]
             avg_intensity = np.mean(region)
 
-            # Skip mostly white regions (blank areas)
-            if avg_intensity > 250:
+            # Skip mostly white regions (blank areas) - lowered threshold
+            if avg_intensity > 240:
                 continue
 
             avg_blue = np.mean(region[:, :, 0])
@@ -127,18 +133,35 @@ class DynamicGridDetector:
             total_red += avg_red
             valid_samples += 1
 
-        # If no valid samples, try a larger central region
+        # If no valid samples, try more aggressive sampling
         if valid_samples == 0:
-            central = color_image[h//3:2*h//3, w//4:3*w//4]
-            total_blue = np.mean(central[:, :, 0])
-            total_red = np.mean(central[:, :, 2])
-            valid_samples = 1
+            # Try the answer grid area with lower white threshold
+            answer_area = color_image[2000:3200, 200:2200]
+            # Only consider non-white pixels
+            non_white_mask = np.mean(answer_area, axis=2) < 250
+            if np.any(non_white_mask):
+                non_white_pixels = answer_area[non_white_mask]
+                total_blue = np.mean(non_white_pixels[:, 0])
+                total_red = np.mean(non_white_pixels[:, 2])
+                valid_samples = 1
+            else:
+                # Last resort: use entire image non-white pixels
+                non_white_mask = np.mean(color_image, axis=2) < 250
+                if np.any(non_white_mask):
+                    non_white_pixels = color_image[non_white_mask]
+                    total_blue = np.mean(non_white_pixels[:, 0])
+                    total_red = np.mean(non_white_pixels[:, 2])
+                    valid_samples = 1
+                else:
+                    # Image is entirely white - default to khoj
+                    return 'khoj'
 
         avg_blue = total_blue / valid_samples
         avg_red = total_red / valid_samples
 
         # Blue forms are Chayan, red forms are Khoj
-        if avg_blue > avg_red + 5:
+        # Lowered threshold from +5 to +2 for better detection
+        if avg_blue > avg_red + 2:
             return 'chayan'
         return 'khoj'
 
