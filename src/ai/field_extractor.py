@@ -92,28 +92,35 @@ class FieldExtractor:
         """
         result = OMRExtractionResult()
 
-        # Extract individual fields
-        name_result = self.extract_name(gray)
+        # Detect batch type from color image
+        batch_type = 'khoj'  # Default
+        if color_image is not None:
+            from ai.dynamic_grid_detector import DynamicGridDetector
+            detector = DynamicGridDetector()
+            batch_type = detector._detect_batch_type(color_image)
+
+        # Extract individual fields (pass batch_type to all)
+        name_result = self.extract_name(gray, batch_type)
         result.name = name_result.value
         result.name_confidence = name_result.confidence
 
-        roll_result = self.extract_roll_number(gray)
+        roll_result = self.extract_roll_number(gray, batch_type)
         result.roll_number = roll_result.value
         result.roll_confidence = roll_result.confidence
 
-        class_result = self.extract_class(gray)
+        class_result = self.extract_class(gray, batch_type)
         result.class_ = class_result.value
         result.class_confidence = class_result.confidence
 
-        section_result = self.extract_section(gray)
+        section_result = self.extract_section(gray, batch_type)
         result.section = section_result.value
         result.section_confidence = section_result.confidence
 
-        school_result = self.extract_school_code(gray)
+        school_result = self.extract_school_code(gray, batch_type)
         result.school_code = school_result.value
         result.school_code_confidence = school_result.confidence
 
-        answers_result = self.extract_answers(gray, color_image)
+        answers_result = self.extract_answers(gray, color_image, batch_type)
         result.answers = {int(q): ans for q, ans in answers_result.items() if ans}
         result.answers_confidence = self._calculate_answers_confidence(answers_result)
 
@@ -133,12 +140,13 @@ class FieldExtractor:
 
         return result
 
-    def extract_name(self, gray: np.ndarray) -> ExtractionResult:
+    def extract_name(self, gray: np.ndarray, batch_type: str = 'khoj') -> ExtractionResult:
         """
         Extract name field (25 characters max).
 
         Args:
             gray: Grayscale image
+            batch_type: 'khoj' or 'chayan' - affects grid spacing
 
         Returns:
             ExtractionResult with extracted name
@@ -147,6 +155,34 @@ class FieldExtractor:
         if grid is None:
             return ExtractionResult(value="", confidence=0.0)
 
+        # Chayan-specific calibration parameters
+        # These were calibrated from visualization testing on 39_18.jpg
+        CHAYAN_ORIGIN_Y = 660
+        CHAYAN_ROW_GAP = 52  # Increased from 51 to fix Y-drift
+        CHAYAN_BUBBLE_SIZE = 28
+
+        # Actual X positions for all 25 columns (with inserted missing columns 7 and 13)
+        # Columns 7 and 13 were empty in the test name but exist on the form
+        CHAYAN_COL_X = [
+            236, 287, 340, 389, 440, 491,  # Columns 1-6 (First name section)
+            542,                            # Column 7 (empty column at end of first name)
+            590, 641, 692, 741, 794,        # Columns 8-12 (Middle name section)
+            845,                            # Column 13 (empty column at end of middle name)
+            895, 946, 995, 1048, 1099, 1150,  # Columns 14-19 (Last name section)
+            1201, 1252, 1303, 1354, 1405, 1456  # Columns 20-25 (extrapolated)
+        ]
+
+        if batch_type == 'chayan':
+            grid = GridConfig(
+                origin=(236, CHAYAN_ORIGIN_Y),
+                rows=26,
+                cols=25,
+                row_gap=CHAYAN_ROW_GAP,
+                col_gap=51,  # Not used directly since we use CHAYAN_COL_X
+                bubble_radius=14,
+                confidence=0.95
+            )
+
         values = FIELD_VALUES['name']
         result_chars = []
         confidences = []
@@ -154,18 +190,44 @@ class FieldExtractor:
 
         # Expected 25 columns for name
         for col in range(min(25, grid.cols)):
-            # Extract bubble images for this column
-            bubble_images = self._extract_column_bubbles(gray, grid, col)
+            if batch_type == 'chayan':
+                # Use direct threshold detection with calibrated X positions
+                x = CHAYAN_COL_X[col] if col < len(CHAYAN_COL_X) else CHAYAN_COL_X[-1] + (col - len(CHAYAN_COL_X) + 1) * 51
+                darkest_val = 255
+                darkest_row = -1
 
-            if not bubble_images:
-                result_chars.append(' ')
-                confidences.append(0.0)
-                continue
+                for row in range(26):
+                    y = int(CHAYAN_ORIGIN_Y + row * CHAYAN_ROW_GAP)
 
-            # Classify and select
-            char, conf = self.bubble_classifier.classify_and_select(bubble_images, values)
-            result_chars.append(char)
-            confidences.append(conf)
+                    if x < 0 or y < 0 or x + CHAYAN_BUBBLE_SIZE > gray.shape[1] or y + CHAYAN_BUBBLE_SIZE > gray.shape[0]:
+                        continue
+
+                    region = gray[y:y+CHAYAN_BUBBLE_SIZE, x:x+CHAYAN_BUBBLE_SIZE]
+                    avg = np.mean(region)
+
+                    if avg < darkest_val:
+                        darkest_val = avg
+                        darkest_row = row
+
+                if darkest_row >= 0 and darkest_val < 180:
+                    result_chars.append(values[darkest_row])
+                    confidences.append(1.0 - darkest_val / 255)
+                else:
+                    result_chars.append(' ')
+                    confidences.append(0.0)
+            else:
+                # Use bubble classifier for Khoj (works well for red forms)
+                bubble_images = self._extract_column_bubbles(gray, grid, col, 0)
+
+                if not bubble_images:
+                    result_chars.append(' ')
+                    confidences.append(0.0)
+                    continue
+
+                # Classify and select
+                char, conf = self.bubble_classifier.classify_and_select(bubble_images, values)
+                result_chars.append(char)
+                confidences.append(conf)
 
         # Clean the name
         raw_name = ''.join(result_chars)
@@ -179,113 +241,229 @@ class FieldExtractor:
             raw_detections=all_detections
         )
 
-    def extract_roll_number(self, gray: np.ndarray) -> ExtractionResult:
+    def extract_roll_number(self, gray: np.ndarray, batch_type: str = 'khoj') -> ExtractionResult:
         """Extract roll number field (3 digits)."""
-        grid = self.grid_detector.detect_grid(gray, 'roll_number')
-        if grid is None:
-            return ExtractionResult(value="", confidence=0.0)
+        # Chayan-specific calibration
+        if batch_type == 'chayan':
+            origin = (1560, 1262)
+            row_gap = 52
+            col_gap = 65
+            bubble_size = 28
+        else:
+            grid = self.grid_detector.detect_grid(gray, 'roll_number')
+            if grid is None:
+                return ExtractionResult(value="", confidence=0.0)
+            origin = grid.origin
+            row_gap = grid.row_gap
+            col_gap = grid.col_gap
+            bubble_size = grid.bubble_radius * 2
 
         values = FIELD_VALUES['roll_number']
         result_digits = []
         confidences = []
 
-        for col in range(min(3, grid.cols)):
-            bubble_images = self._extract_column_bubbles(gray, grid, col)
+        for col in range(3):
+            if batch_type == 'chayan':
+                # Direct threshold detection for Chayan
+                x = int(origin[0] + col * col_gap)
+                darkest_val = 255
+                darkest_row = -1
 
-            if not bubble_images:
-                result_digits.append('')
-                confidences.append(0.0)
-                continue
+                for row in range(10):
+                    y = int(origin[1] + row * row_gap)
+                    if y + bubble_size > gray.shape[0] or x + bubble_size > gray.shape[1]:
+                        continue
+                    region = gray[y:y+bubble_size, x:x+bubble_size]
+                    avg = np.mean(region)
+                    if avg < darkest_val:
+                        darkest_val = avg
+                        darkest_row = row
 
-            digit, conf = self.bubble_classifier.classify_and_select(bubble_images, values)
-            if digit != ' ':
-                result_digits.append(digit)
-                confidences.append(conf)
+                if darkest_row >= 0 and darkest_val < 180:
+                    result_digits.append(values[darkest_row])
+                    confidences.append(1.0 - darkest_val / 255)
+                else:
+                    result_digits.append('')
+                    confidences.append(0.0)
             else:
-                result_digits.append('')
-                confidences.append(0.0)
+                grid = self.grid_detector.detect_grid(gray, 'roll_number')
+                bubble_images = self._extract_column_bubbles(gray, grid, col)
+
+                if not bubble_images:
+                    result_digits.append('')
+                    confidences.append(0.0)
+                    continue
+
+                digit, conf = self.bubble_classifier.classify_and_select(bubble_images, values)
+                if digit != ' ':
+                    result_digits.append(digit)
+                    confidences.append(conf)
+                else:
+                    result_digits.append('')
+                    confidences.append(0.0)
 
         roll_number = ''.join(result_digits)
         avg_confidence = np.mean([c for c in confidences if c > 0]) if any(c > 0 for c in confidences) else 0.0
 
         return ExtractionResult(value=roll_number, confidence=avg_confidence)
 
-    def extract_class(self, gray: np.ndarray) -> ExtractionResult:
+    def extract_class(self, gray: np.ndarray, batch_type: str = 'khoj') -> ExtractionResult:
         """Extract class field (single value 3-10)."""
-        grid = self.grid_detector.detect_grid(gray, 'class')
-        if grid is None:
-            return ExtractionResult(value="", confidence=0.0)
-
         values = FIELD_VALUES['class']
 
-        # Single column
-        bubble_images = self._extract_column_bubbles(gray, grid, 0)
+        if batch_type == 'chayan':
+            # Chayan-specific calibration
+            origin = (1775, 1266)
+            row_gap = 50
+            bubble_size = 28
 
-        if not bubble_images:
+            darkest_val = 255
+            darkest_row = -1
+
+            for row in range(8):
+                x = origin[0]
+                y = int(origin[1] + row * row_gap)
+                if y + bubble_size > gray.shape[0] or x + bubble_size > gray.shape[1]:
+                    continue
+                region = gray[y:y+bubble_size, x:x+bubble_size]
+                avg = np.mean(region)
+                if avg < darkest_val:
+                    darkest_val = avg
+                    darkest_row = row
+
+            if darkest_row >= 0 and darkest_val < 180:
+                return ExtractionResult(value=values[darkest_row], confidence=1.0 - darkest_val / 255)
             return ExtractionResult(value="", confidence=0.0)
+        else:
+            grid = self.grid_detector.detect_grid(gray, 'class')
+            if grid is None:
+                return ExtractionResult(value="", confidence=0.0)
 
-        class_val, conf = self.bubble_classifier.classify_and_select(bubble_images, values)
+            # Single column
+            bubble_images = self._extract_column_bubbles(gray, grid, 0)
 
-        return ExtractionResult(value=class_val.strip(), confidence=conf)
+            if not bubble_images:
+                return ExtractionResult(value="", confidence=0.0)
 
-    def extract_section(self, gray: np.ndarray) -> ExtractionResult:
+            class_val, conf = self.bubble_classifier.classify_and_select(bubble_images, values)
+
+            return ExtractionResult(value=class_val.strip(), confidence=conf)
+
+    def extract_section(self, gray: np.ndarray, batch_type: str = 'khoj') -> ExtractionResult:
         """Extract section field (single value A-H)."""
-        grid = self.grid_detector.detect_grid(gray, 'section')
-        if grid is None:
-            return ExtractionResult(value="", confidence=0.0)
-
         values = FIELD_VALUES['section']
 
-        bubble_images = self._extract_column_bubbles(gray, grid, 0)
+        if batch_type == 'chayan':
+            # Chayan-specific calibration
+            origin = (1920, 1252)
+            row_gap = 54
+            bubble_size = 28
 
-        if not bubble_images:
+            darkest_val = 255
+            darkest_row = -1
+
+            for row in range(8):
+                x = origin[0]
+                y = int(origin[1] + row * row_gap)
+                if y + bubble_size > gray.shape[0] or x + bubble_size > gray.shape[1]:
+                    continue
+                region = gray[y:y+bubble_size, x:x+bubble_size]
+                avg = np.mean(region)
+                if avg < darkest_val:
+                    darkest_val = avg
+                    darkest_row = row
+
+            if darkest_row >= 0 and darkest_val < 180:
+                return ExtractionResult(value=values[darkest_row], confidence=1.0 - darkest_val / 255)
             return ExtractionResult(value="", confidence=0.0)
+        else:
+            grid = self.grid_detector.detect_grid(gray, 'section')
+            if grid is None:
+                return ExtractionResult(value="", confidence=0.0)
 
-        section_val, conf = self.bubble_classifier.classify_and_select(bubble_images, values)
+            bubble_images = self._extract_column_bubbles(gray, grid, 0)
 
-        return ExtractionResult(value=section_val.strip(), confidence=conf)
+            if not bubble_images:
+                return ExtractionResult(value="", confidence=0.0)
 
-    def extract_school_code(self, gray: np.ndarray) -> ExtractionResult:
+            section_val, conf = self.bubble_classifier.classify_and_select(bubble_images, values)
+
+            return ExtractionResult(value=section_val.strip(), confidence=conf)
+
+    def extract_school_code(self, gray: np.ndarray, batch_type: str = 'khoj') -> ExtractionResult:
         """Extract school code field (3 digits)."""
-        grid = self.grid_detector.detect_grid(gray, 'school_code')
-        if grid is None:
-            return ExtractionResult(value="", confidence=0.0)
+        # Chayan-specific calibration
+        if batch_type == 'chayan':
+            origin = (2066, 1262)
+            row_gap = 52
+            col_gap = 60
+            bubble_size = 28
+        else:
+            grid = self.grid_detector.detect_grid(gray, 'school_code')
+            if grid is None:
+                return ExtractionResult(value="", confidence=0.0)
+            origin = grid.origin
+            row_gap = grid.row_gap
+            col_gap = grid.col_gap
+            bubble_size = grid.bubble_radius * 2
 
         values = FIELD_VALUES['school_code']
         result_digits = []
         confidences = []
 
-        for col in range(min(3, grid.cols)):
-            bubble_images = self._extract_column_bubbles(gray, grid, col)
+        for col in range(3):
+            if batch_type == 'chayan':
+                # Direct threshold detection for Chayan
+                x = int(origin[0] + col * col_gap)
+                darkest_val = 255
+                darkest_row = -1
 
-            if not bubble_images:
-                result_digits.append('')
-                confidences.append(0.0)
-                continue
+                for row in range(10):
+                    y = int(origin[1] + row * row_gap)
+                    if y + bubble_size > gray.shape[0] or x + bubble_size > gray.shape[1]:
+                        continue
+                    region = gray[y:y+bubble_size, x:x+bubble_size]
+                    avg = np.mean(region)
+                    if avg < darkest_val:
+                        darkest_val = avg
+                        darkest_row = row
 
-            digit, conf = self.bubble_classifier.classify_and_select(bubble_images, values)
-            if digit != ' ':
-                result_digits.append(digit)
-                confidences.append(conf)
+                if darkest_row >= 0 and darkest_val < 180:
+                    result_digits.append(values[darkest_row])
+                    confidences.append(1.0 - darkest_val / 255)
+                else:
+                    result_digits.append('')
+                    confidences.append(0.0)
             else:
-                result_digits.append('')
-                confidences.append(0.0)
+                grid = self.grid_detector.detect_grid(gray, 'school_code')
+                bubble_images = self._extract_column_bubbles(gray, grid, col)
+
+                if not bubble_images:
+                    result_digits.append('')
+                    confidences.append(0.0)
+                    continue
+
+                digit, conf = self.bubble_classifier.classify_and_select(bubble_images, values)
+                if digit != ' ':
+                    result_digits.append(digit)
+                    confidences.append(conf)
+                else:
+                    result_digits.append('')
+                    confidences.append(0.0)
 
         school_code = ''.join(result_digits)
         avg_confidence = np.mean([c for c in confidences if c > 0]) if any(c > 0 for c in confidences) else 0.0
 
         return ExtractionResult(value=school_code, confidence=avg_confidence)
 
-    def extract_answers(self, gray: np.ndarray, color_image: np.ndarray = None) -> Dict[str, str]:
+    def extract_answers(self, gray: np.ndarray, color_image: np.ndarray = None, batch_type: str = None) -> Dict[str, str]:
         """
-        Extract all 60 answers using DYNAMIC grid detection.
-
-        Uses DynamicGridDetector to find actual bubble positions instead of
-        relying on static calibrated coordinates that may not match all images.
+        Extract all 60 answers.
 
         Args:
             gray: Grayscale image
             color_image: Optional BGR color image for batch detection (khoj/chayan)
+            batch_type: 'khoj' or 'chayan' - if None, will auto-detect from color_image
 
         Returns dict mapping question number (str) to answer (A/B/C/D or empty).
         """
@@ -296,14 +474,67 @@ class FieldExtractor:
         for q in range(1, 61):
             answers[str(q)] = ''
 
-        # Use dynamic grid detection to find actual bubble positions
-        # Pass color image for batch detection (khoj=red, chayan=blue)
+        # Auto-detect batch type if not provided
+        if batch_type is None and color_image is not None:
+            dynamic_detector = DynamicGridDetector()
+            batch_type = dynamic_detector._detect_batch_type(color_image)
+        elif batch_type is None:
+            batch_type = 'khoj'
+
+        # Chayan-specific calibration (exact pixspy coordinates)
+        if batch_type == 'chayan':
+            CHAYAN_ANSWER_GRIDS = [
+                {'origin': (319, 2185), 'row_gap': 94, 'col_gap': 63},  # Block 1 (Q1-10)
+                {'origin': (657, 2183), 'row_gap': 94, 'col_gap': 63},  # Block 2 (Q11-20)
+                {'origin': (995, 2183), 'row_gap': 94, 'col_gap': 63},  # Block 3 (Q21-30)
+                {'origin': (1332, 2183), 'row_gap': 94, 'col_gap': 63}, # Block 4 (Q31-40)
+                {'origin': (1670, 2183), 'row_gap': 94, 'col_gap': 63}, # Block 5 (Q41-50)
+                {'origin': (2007, 2183), 'row_gap': 94, 'col_gap': 63}, # Block 6 (Q51-60)
+            ]
+            bubble_size = 28
+
+            for block_idx, block in enumerate(CHAYAN_ANSWER_GRIDS):
+                start_q = block_idx * 10 + 1
+                origin = block['origin']
+                row_gap = block['row_gap']
+                col_gap = block['col_gap']
+
+                for row in range(10):
+                    q_num = start_q + row
+                    darkness_values = []
+
+                    for col in range(4):
+                        x = int(origin[0] + col * col_gap)
+                        y = int(origin[1] + row * row_gap)
+
+                        if y + bubble_size > gray.shape[0] or x + bubble_size > gray.shape[1]:
+                            darkness_values.append(0)
+                            continue
+
+                        region = gray[y:y+bubble_size, x:x+bubble_size]
+                        darkness = 255 - np.mean(region)
+                        darkness_values.append(darkness)
+
+                    if darkness_values:
+                        max_darkness = max(darkness_values)
+                        max_idx = darkness_values.index(max_darkness)
+                        sorted_d = sorted(darkness_values, reverse=True)
+                        gap = sorted_d[0] - sorted_d[1] if len(sorted_d) > 1 else max_darkness
+
+                        if max_darkness >= 150:
+                            answers[str(q_num)] = values[max_idx]
+                        elif max_darkness >= 100 and gap >= 40:
+                            answers[str(q_num)] = values[max_idx]
+                        elif max_darkness >= 40 and gap >= 20:
+                            answers[str(q_num)] = values[max_idx]
+
+            return answers
+
+        # Khoj: Use dynamic grid detection
         dynamic_detector = DynamicGridDetector()
         detected_grids = dynamic_detector.detect_answer_grids(gray, color_image)
 
         if not detected_grids:
-            # Dynamic detection failed - return all blank
-            # (No longer using static fallback per user request)
             return answers
 
         # Process each detected block
@@ -415,7 +646,8 @@ class FieldExtractor:
         self,
         gray: np.ndarray,
         grid: GridConfig,
-        col: int
+        col: int,
+        extra_x: int = 0
     ) -> List[np.ndarray]:
         """Extract bubble images for all rows in a column."""
         bubbles = []
@@ -423,6 +655,7 @@ class FieldExtractor:
 
         for row in range(grid.rows):
             cx, cy = self.grid_detector.get_bubble_position(grid, row, col)
+            cx += extra_x  # Apply extra X offset for Chayan name sections
 
             # Calculate bounding box
             r = grid.bubble_radius + 2  # Small padding

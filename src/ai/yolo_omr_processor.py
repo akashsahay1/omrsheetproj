@@ -186,15 +186,19 @@ class YOLOOMRProcessor:
     FIELD_CONFIGS = {
         'name': {
             'origin': (243, 690),
-            'origin_chayan': (243, 690),
+            'origin_chayan': (235, 660),  # Calibrated for Chayan blue forms
             'bubble_size': (33, 33),
             'rows_gap': 51,
-            'cols_gap': 52,
+            'cols_gap': 51,  # Calibrated: 49-53px works, using 51
             'x_shift_per_row': -3.56,
             'rows': 26,
             'cols': 25,
             'values': list('ABCDEFGHIJKLMNOPQRSTUVWXYZ'),
-            'direction': 'vertical'
+            'direction': 'vertical',
+            # Chayan forms have extra gaps between name sections (first/middle/last name)
+            # After col 5 (end of first name) and col 10 (end of middle name)
+            # Gap is 99px instead of standard 51px, so extra 48px
+            'extra_gaps_chayan': {5: 48, 10: 48},  # col_idx: extra_pixels
         },
         'roll_number': {
             'origin': (1640, 1289),
@@ -1954,9 +1958,17 @@ class YOLOOMRProcessor:
             # Calculate X position
             x = origin[0] + col * cols_gap
 
-            # For name field: add extra spacing after column 10
-            if field_name == 'name' and col > 10:
-                x += 54
+            # For name field: handle extra gaps between name sections
+            if field_name == 'name':
+                if hasattr(self, '_is_chayan_batch') and self._is_chayan_batch:
+                    # Chayan has gaps at col 5 and col 10 (between first/middle/last name)
+                    extra_gaps = config.get('extra_gaps_chayan', {})
+                    for gap_col, extra_px in extra_gaps.items():
+                        if col > gap_col:
+                            x += extra_px
+                elif col > 10:
+                    # Khoj: add extra spacing after column 10
+                    x += 54
 
             # Check ALL bubbles in this column
             all_bubbles = []
