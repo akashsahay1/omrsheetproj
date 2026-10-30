@@ -1,0 +1,900 @@
+{
+  "schools": [
+    {
+      "code": "1",
+      "name": "Sahebganj , Jamuna Das S.S.M"
+    },
+    {
+      "code": "2",
+      "name": "Rajmahal , B.L.N.L.B S.S.M"
+    },
+    {
+      "code": "3",
+      "name": "Boriyo , S.S.V.Mandir"
+    },
+    {
+      "code": "4",
+      "name": "Jamnagar , S.S.M"
+    },
+    {
+      "code": "5",
+      "name": "Lalmati , S.S.M"
+    },
+    {
+      "code": "6",
+      "name": "Barharwa , S.S.M"
+    },
+    {
+      "code": "7",
+      "name": "Kotalpokhar ,S.S.M"
+    },
+    {
+      "code": "9",
+      "name": "Udhwa , S.S.M"
+    },
+    {
+      "code": "11",
+      "name": "Pakur , S.S.V.Mandir"
+    },
+    {
+      "code": "12",
+      "name": "Hiranpur , S.S.M"
+    },
+    {
+      "code": "13",
+      "name": "Pakuriya , S.S.M"
+    },
+    {
+      "code": "14",
+      "name": "Littipara , S.S.V.M"
+    },
+    {
+      "code": "17",
+      "name": "Mahendra Muni,S.S.V.M , Madhupur"
+    },
+    {
+      "code": "19",
+      "name": "Rukmani Devi , S.V.M"
+    },
+    {
+      "code": "20",
+      "name": "Margo Munda, S.S.M"
+    },
+    {
+      "code": "21",
+      "name": "Girsholi , S.S.M"
+    },
+    {
+      "code": "22",
+      "name": "Budhai, S.S.Mandir"
+    },
+    {
+      "code": "23",
+      "name": "Khoprodih , S.S.M"
+    },
+    {
+      "code": "24",
+      "name": "Bhojpur , S.S.M"
+    },
+    {
+      "code": "25",
+      "name": "Fatehpur , S.S.M"
+    },
+    {
+      "code": "26",
+      "name": "Khaga , S.S.M"
+    },
+    {
+      "code": "27",
+      "name": "Kumirdaha, Nala, S S M"
+    },
+    {
+      "code": "28",
+      "name": "Hartopa , S.S.M"
+    },
+    {
+      "code": "29",
+      "name": "Lalmatiya , S.S.V.M"
+    },
+    {
+      "code": "30",
+      "name": "Poraiyahat , S.S.M"
+    },
+    {
+      "code": "31",
+      "name": "Bhatundha , S.S.M"
+    },
+    {
+      "code": "32",
+      "name": "Deodar , S.S.M"
+    },
+    {
+      "code": "33",
+      "name": "Godda , S.S.M"
+    },
+    {
+      "code": "34",
+      "name": "Vidya Sagar, S.S.M"
+    },
+    {
+      "code": "35",
+      "name": "Namupara , S.S.M"
+    },
+    {
+      "code": "37",
+      "name": "Mihijam(Dutta Road) , S.S.M"
+    },
+    {
+      "code": "38",
+      "name": "Jhilua , Matand S S M"
+    },
+    {
+      "code": "39",
+      "name": "Karogram , S.S.M"
+    },
+    {
+      "code": "40",
+      "name": "Dumka , S.S.M"
+    },
+    {
+      "code": "41",
+      "name": "Tharihat , S.S.M"
+    },
+    {
+      "code": "42",
+      "name": "Sitikbona ( Singhni ) , S.S.M"
+    },
+    {
+      "code": "43",
+      "name": "Haripur , S.S.M"
+    },
+    {
+      "code": "44",
+      "name": "Chapri , S.S.M"
+    },
+    {
+      "code": "45",
+      "name": "Sarwan , S.S.M"
+    },
+    {
+      "code": "47",
+      "name": "Rajkamal, Dhanbad"
+    },
+    {
+      "code": "48",
+      "name": "Yasomati Shree Vidya Niketan"
+    },
+    {
+      "code": "49",
+      "name": "Laxmi Devi Jhariya , S.S.V.M"
+    },
+    {
+      "code": "50",
+      "name": "Ratanpur Tundi, S.V.M"
+    },
+    {
+      "code": "51",
+      "name": "Madhugora , S.S.M"
+    },
+    {
+      "code": "52",
+      "name": "Kurmidih S.S.M"
+    },
+    {
+      "code": "53",
+      "name": "Bhutgariya , S.S.M"
+    },
+    {
+      "code": "54",
+      "name": "Sindri , S.S.V.M"
+    },
+    {
+      "code": "58",
+      "name": "Sinidih , S.V.M"
+    },
+    {
+      "code": "59",
+      "name": "Baghmara, S.S.V.M"
+    },
+    {
+      "code": "60",
+      "name": "Bhulinagar , S.V.Mandir"
+    },
+    {
+      "code": "61",
+      "name": "Katras S.S.M"
+    },
+    {
+      "code": "62",
+      "name": "Tetulmanri , S.S.V.M"
+    },
+    {
+      "code": "63",
+      "name": "Bokaro 3 C, P.T.J.M ,S.V.M"
+    },
+    {
+      "code": "64",
+      "name": "Bokaro 9D , S.V.Mandir"
+    },
+    {
+      "code": "65",
+      "name": "Bokaro 2 A, S.S.V.M"
+    },
+    {
+      "code": "67",
+      "name": "Balidih , S.S.M"
+    },
+    {
+      "code": "68",
+      "name": "Deonagar , Dugda S.S.V.M"
+    },
+    {
+      "code": "69",
+      "name": "Dugda Basti ,S.S.M"
+    },
+    {
+      "code": "70",
+      "name": "Telo , S.S.V.M"
+    },
+    {
+      "code": "72",
+      "name": "Gunjardih , S.S.M"
+    },
+    {
+      "code": "73",
+      "name": "Chandrapura Jharnadih , S.S.M"
+    },
+    {
+      "code": "74",
+      "name": "Gomo Bishnpur , S.S.M"
+    },
+    {
+      "code": "76",
+      "name": "Petarwar , S.S.M"
+    },
+    {
+      "code": "77",
+      "name": "Khairachatar , S.S.M"
+    },
+    {
+      "code": "78",
+      "name": "Jainamore , S.S.M"
+    },
+    {
+      "code": "79",
+      "name": "Sadam , S.S.M"
+    },
+    {
+      "code": "80",
+      "name": "Kasmar S.S.M"
+    },
+    {
+      "code": "81",
+      "name": "Kasturba Shree Vidya Niketan, Dhori"
+    },
+    {
+      "code": "82",
+      "name": "Phushro , Anpati Devi S.V.M"
+    },
+    {
+      "code": "83",
+      "name": "Staff Quater Dhori , S.V.M"
+    },
+    {
+      "code": "84",
+      "name": "Makoli , S.S.V.M"
+    },
+    {
+      "code": "85",
+      "name": "Sunday Bazar , S.S.V.M"
+    },
+    {
+      "code": "86",
+      "name": "Jaridih Bazar , S.S.M"
+    },
+    {
+      "code": "87",
+      "name": "Angwali , S.S.Mandir"
+    },
+    {
+      "code": "88",
+      "name": "Pichhari , S.S.M"
+    },
+    {
+      "code": "89",
+      "name": "Tupkadih S.S.M"
+    },
+    {
+      "code": "91",
+      "name": "Chalkari Basti , S.S.M"
+    },
+    {
+      "code": "92",
+      "name": "Kumhar Toli , Hazaribag S.V.Mandir"
+    },
+    {
+      "code": "93",
+      "name": "Malviya Marg , Hazaribag S.S.M"
+    },
+    {
+      "code": "94",
+      "name": "Korra , S.S.M"
+    },
+    {
+      "code": "95",
+      "name": "Ramnagar Kadma S.S.M"
+    },
+    {
+      "code": "96",
+      "name": "Jallondh , S.S.M"
+    },
+    {
+      "code": "97",
+      "name": "Barka Khurd , S.S.M"
+    },
+    {
+      "code": "99",
+      "name": "Chatra Dibha , S.S.V.M"
+    },
+    {
+      "code": "100",
+      "name": "Hafua , S.S.M"
+    },
+    {
+      "code": "101",
+      "name": "Gaurigram Jori , S.S.M"
+    },
+    {
+      "code": "102",
+      "name": "Dantar , S.S.M"
+    },
+    {
+      "code": "103",
+      "name": "Pathalgadda , S.S.M"
+    },
+    {
+      "code": "104",
+      "name": "Itkhori , S.S.M"
+    },
+    {
+      "code": "105",
+      "name": "Jhumaritilya ( K.Rai ) S.V.M"
+    },
+    {
+      "code": "106",
+      "name": "Jhumaritiiya ( Shiv Tara ) S.S.V.M"
+    },
+    {
+      "code": "107",
+      "name": "Barhi , S.S.M"
+    },
+    {
+      "code": "108",
+      "name": "Jai Nagar , S.S.M"
+    },
+    {
+      "code": "109",
+      "name": "Chandwara , S.S.M"
+    },
+    {
+      "code": "113",
+      "name": "Barganda Giridih , S.S.V.M"
+    },
+    {
+      "code": "114",
+      "name": "Bhalpahri , S.S.M"
+    },
+    {
+      "code": "115",
+      "name": "Bengabad , S.S.M"
+    },
+    {
+      "code": "116",
+      "name": "Chatro , S.S.M"
+    },
+    {
+      "code": "117",
+      "name": "Malda , S.S.M"
+    },
+    {
+      "code": "118",
+      "name": "Pihara , S.S.M"
+    },
+    {
+      "code": "119",
+      "name": "Bharkhatta , S.S.M"
+    },
+    {
+      "code": "121",
+      "name": "Janta Jaridih , S.S.M"
+    },
+    {
+      "code": "122",
+      "name": "Modidih , S.S.M"
+    },
+    {
+      "code": "123",
+      "name": "Jatadih , S.S.M"
+    },
+    {
+      "code": "126",
+      "name": "Bandkharo , S.S.M"
+    },
+    {
+      "code": "132",
+      "name": "Kobna , S.S.M"
+    },
+    {
+      "code": "134",
+      "name": "Bandarkuppi , S.S.M"
+    },
+    {
+      "code": "135",
+      "name": "Medininagar , S.V.M"
+    },
+    {
+      "code": "136",
+      "name": "Panki , S.S.M"
+    },
+    {
+      "code": "137",
+      "name": "Rajhara Kothi , S.S.M"
+    },
+    {
+      "code": "138",
+      "name": "Latehar Station , S.S.M"
+    },
+    {
+      "code": "139",
+      "name": "Latehar Bazar , S.S.V.M"
+    },
+    {
+      "code": "140",
+      "name": "Balumath , S.S.M"
+    },
+    {
+      "code": "141",
+      "name": "Bariyatu S.S.M"
+    },
+    {
+      "code": "142",
+      "name": "Japla , S.S.V.M"
+    },
+    {
+      "code": "145",
+      "name": "Bilaspur , S.S.M"
+    },
+    {
+      "code": "146",
+      "name": "Hariharganj , S.S.M"
+    },
+    {
+      "code": "147",
+      "name": "Hari Nagar , S.S.M"
+    },
+    {
+      "code": "149",
+      "name": "Nagaruntari ,(Banshidhar Nagar) S.S.V.M."
+    },
+    {
+      "code": "150",
+      "name": "Bhawnathpur Nagari , S.S.V.M"
+    },
+    {
+      "code": "151",
+      "name": "Bhawnathpur  Bazar , S.S.M"
+    },
+    {
+      "code": "152",
+      "name": "Ketar , S.S.M"
+    },
+    {
+      "code": "156",
+      "name": "Raxel Tendua , S.S.M"
+    },
+    {
+      "code": "157",
+      "name": "Gumla , S.V.M"
+    },
+    {
+      "code": "160",
+      "name": "Sisai Kudra , S.S.V.M"
+    },
+    {
+      "code": "161",
+      "name": "Bharno S.S.M"
+    },
+    {
+      "code": "162",
+      "name": "Thethaitangar , S.S.M"
+    },
+    {
+      "code": "164",
+      "name": "Lohardaga, Shila Agarwal S.V.M"
+    },
+    {
+      "code": "165",
+      "name": "Lohardaga, Sundri Devi S.S.M"
+    },
+    {
+      "code": "166",
+      "name": "Barkichapi , S.S.M"
+    },
+    {
+      "code": "167",
+      "name": "Senha , S.S.M"
+    },
+    {
+      "code": "168",
+      "name": "Kuru, S.S.M"
+    },
+    {
+      "code": "169",
+      "name": "Kairo , S.S.M"
+    },
+    {
+      "code": "172",
+      "name": "Raidih , B.L.Sahu S.S.M"
+    },
+    {
+      "code": "173",
+      "name": "Pandriya , S.S.M"
+    },
+    {
+      "code": "175",
+      "name": "Sehal , S.S.M"
+    },
+    {
+      "code": "177",
+      "name": "Dewaki , S.S.M"
+    },
+    {
+      "code": "178",
+      "name": "Aadar , S.S.M"
+    },
+    {
+      "code": "179",
+      "name": "Kaimbatengria , S.S.M"
+    },
+    {
+      "code": "180",
+      "name": "Gondaltoli , S.S.M"
+    },
+    {
+      "code": "184",
+      "name": "Murgu , S.S.M"
+    },
+    {
+      "code": "185",
+      "name": "Morhabadi S.S.V.M"
+    },
+    {
+      "code": "186",
+      "name": "Chutia S.S.V.M"
+    },
+    {
+      "code": "187",
+      "name": "Krishnapuri Chutia , S.S.M"
+    },
+    {
+      "code": "188",
+      "name": "Ormanjhi , S.S.V.M"
+    },
+    {
+      "code": "189",
+      "name": "Tamar , S.S.V.M"
+    },
+    {
+      "code": "190",
+      "name": "Ammapakna, S.S.M"
+    },
+    {
+      "code": "191",
+      "name": "Kulhi S.S.V.M"
+    },
+    {
+      "code": "192",
+      "name": "Khalari S.V.M"
+    },
+    {
+      "code": "193",
+      "name": "Purani Rai , S.S.M"
+    },
+    {
+      "code": "194",
+      "name": "Dakra S.S.V.M"
+    },
+    {
+      "code": "195",
+      "name": "Piparwar S.S.V.M"
+    },
+    {
+      "code": "196",
+      "name": "Maklusiganj, S.S.M"
+    },
+    {
+      "code": "197",
+      "name": "Ramgarh  , S.S.V.M"
+    },
+    {
+      "code": "198",
+      "name": "Patratu Tharmal S.S.V.M"
+    },
+    {
+      "code": "199",
+      "name": "Sirka , S.S.V.M"
+    },
+    {
+      "code": "200",
+      "name": "Rajrappa , S.S.V.M"
+    },
+    {
+      "code": "201",
+      "name": "Kundariya Sarubera S.S.V.M"
+    },
+    {
+      "code": "202",
+      "name": "Patratu Bazar S.S.V.M"
+    },
+    {
+      "code": "204",
+      "name": "Lari S.S.V.M"
+    },
+    {
+      "code": "205",
+      "name": "Giddi Basti , S.S.M"
+    },
+    {
+      "code": "206",
+      "name": "Kathitar , S.S.Mandir"
+    },
+    {
+      "code": "207",
+      "name": "Bero S.S.V.M"
+    },
+    {
+      "code": "208",
+      "name": "Bijupara , S.S.M"
+    },
+    {
+      "code": "209",
+      "name": "Patratugram S.S.V.M"
+    },
+    {
+      "code": "210",
+      "name": "Lamkana , S.S.M"
+    },
+    {
+      "code": "216",
+      "name": "Bagbera, S.S.V.M"
+    },
+    {
+      "code": "217",
+      "name": "Shastri Nagar Kadma , S.S.V.M"
+    },
+    {
+      "code": "218",
+      "name": "Birsa Nagar , S.S.M"
+    },
+    {
+      "code": "219",
+      "name": "Hesal ,S.S.M"
+    },
+    {
+      "code": "220",
+      "name": "Bangalibasa , S.S.M"
+    },
+    {
+      "code": "221",
+      "name": "Kowali , S.S.M"
+    },
+    {
+      "code": "222",
+      "name": "Rasunchopa , S.S.M"
+    },
+    {
+      "code": "223",
+      "name": "Haldipokhar , S.S.M"
+    },
+    {
+      "code": "225",
+      "name": "Ghatshila , S.V.M"
+    },
+    {
+      "code": "227",
+      "name": "Chakuliya , S.S.M"
+    },
+    {
+      "code": "228",
+      "name": "Kokpara , S.S.M"
+    },
+    {
+      "code": "229",
+      "name": "Baharagora , S.S.M"
+    },
+    {
+      "code": "230",
+      "name": "Pipala , S.S.M"
+    },
+    {
+      "code": "231",
+      "name": "Musabani , S.V.M"
+    },
+    {
+      "code": "234",
+      "name": "Badiya , S.S.M"
+    },
+    {
+      "code": "235",
+      "name": "Kumrasol , S.S.M"
+    },
+    {
+      "code": "236",
+      "name": "Paruliya S.S.M"
+    },
+    {
+      "code": "237",
+      "name": "Koilisuta , S.S.M"
+    },
+    {
+      "code": "238",
+      "name": "Chandil , S.S.M"
+    },
+    {
+      "code": "239",
+      "name": "Cheliyama , S.S.M"
+    },
+    {
+      "code": "240",
+      "name": "Khunti , S.S.M"
+    },
+    {
+      "code": "241",
+      "name": "Bandu , S.S.M"
+    },
+    {
+      "code": "242",
+      "name": "Sini , S.S.M"
+    },
+    {
+      "code": "243",
+      "name": "Burudih , S.S.Mandir"
+    },
+    {
+      "code": "244",
+      "name": "Bara Bambo , S.S.M"
+    },
+    {
+      "code": "245",
+      "name": "Mahalimurup , S.S.M"
+    },
+    {
+      "code": "246",
+      "name": "Saraikela , S.S.M"
+    },
+    {
+      "code": "247",
+      "name": "Chaibasa , P.Jain S.S.V.Mandir"
+    },
+    {
+      "code": "248",
+      "name": "Tulsi Bhawan , S.S.M"
+    },
+    {
+      "code": "249",
+      "name": "Pump Road ; Chakradharpur , S.S.M"
+    },
+    {
+      "code": "250",
+      "name": "Pilka , S.S.M"
+    },
+    {
+      "code": "251",
+      "name": "Thai , S.S.M"
+    },
+    {
+      "code": "252",
+      "name": "Karanjo , S.S.M"
+    },
+    {
+      "code": "253",
+      "name": "Goilkera , S.S.M"
+    },
+    {
+      "code": "255",
+      "name": "Jagnnathpur , S.S.M"
+    },
+    {
+      "code": "256",
+      "name": "Hatgamharia , S.S.M"
+    },
+    {
+      "code": "257",
+      "name": "Jaintgarh , S.S.M"
+    },
+    {
+      "code": "258",
+      "name": "Bara Jamda , S.S.M"
+    },
+    {
+      "code": "259",
+      "name": "Nowamundi , S.S.M"
+    },
+    {
+      "code": "260",
+      "name": "Kotgarh , S.S.M"
+    },
+    {
+      "code": "261",
+      "name": "Pawra , S.S.M"
+    },
+    {
+      "code": "263",
+      "name": "Roam , S.S.M"
+    },
+    {
+      "code": "264",
+      "name": "Kerukocha , S.S.M"
+    },
+    {
+      "code": "265",
+      "name": "Mohilisol , S.S.M"
+    },
+    {
+      "code": "266",
+      "name": "Ranguniya , S.S.M"
+    },
+    {
+      "code": "271",
+      "name": "Babhangawa , S.S.M"
+    },
+    {
+      "code": "272",
+      "name": "Gomia , S.S.M"
+    },
+    {
+      "code": "273",
+      "name": "Chanpi(Bokaro) S.S.M"
+    },
+    {
+      "code": "275",
+      "name": "Kaliga , S.S.M"
+    },
+    {
+      "code": "277",
+      "name": "Khandamauda , S.S.M"
+    },
+    {
+      "code": "278",
+      "name": "Bingaon Karra , S.S.M"
+    },
+    {
+      "code": "279",
+      "name": "A.P.J.S.V.Mandir , Kudlum"
+    },
+    {
+      "code": "282",
+      "name": "Gidhour , S.S.Mandir"
+    },
+    {
+      "code": "291",
+      "name": "Kunda Uma Nalini Brahma SVM"
+    },
+    {
+      "code": "292",
+      "name": "Gohara Rajpur , S.S.M"
+    },
+    {
+      "code": "293",
+      "name": "Kukru , S.S.M"
+    },
+    {
+      "code": "296",
+      "name": "Kendadih , S.S.M"
+    },
+    {
+      "code": "298",
+      "name": "Garhwa , S.S.M"
+    }
+  ]
+}

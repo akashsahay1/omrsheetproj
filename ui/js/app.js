@@ -18,7 +18,13 @@ const AppState = {
     sortColumn: 'rank',
     sortDirection: 'asc',
     engineReady: false,
-    engineStatusInterval: null
+    engineStatusInterval: null,
+    schools: [],
+    editingSchoolCode: null,
+    answerKeys: [],
+    activeAnswerKeyId: null,
+    editingAnswerKeyId: null,
+    answerKeyDirty: false
 };
 
 // Initialize application when DOM is ready
@@ -29,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Wait for PyWebView API to be ready
 window.addEventListener('pywebviewready', () => {
     console.log('PyWebView API ready');
-    loadAnswerKeyStatus();
+    loadAnswerKeys();
     loadSettings();
     // Start checking engine status
     startEngineStatusCheck();
@@ -140,6 +146,16 @@ function navigateTo(page) {
     // Page-specific actions
     if (page === 'results') {
         loadResults();
+    } else if (page === 'school-codes') {
+        loadSchoolCodes();
+    } else if (page === 'answer-key') {
+        // Always land on the list of answer keys (asks first if the open key has unsaved changes)
+        if (AppState.editingAnswerKeyId) {
+            closeAnswerKeyEditor();
+        }
+        loadAnswerKeys();
+    } else if (page === 'process') {
+        loadAnswerKeys();
     }
 }
 
@@ -179,7 +195,7 @@ async function selectOutputFile() {
 // ==================== Answer Key ====================
 
 /**
- * Initialize answer key grid
+ * Initialize answer key grid (60 questions, used by the editor)
  */
 function initAnswerKeyGrid() {
     const grid = document.getElementById('answer-key-grid');
@@ -190,7 +206,7 @@ function initAnswerKeyGrid() {
         item.className = 'answer-key-item';
         item.innerHTML = `
             <label>Q${q}</label>
-            <select id="ak-${q}" onchange="updateAnswerKeyCount()">
+            <select id="ak-${q}" onchange="onAnswerKeyGridChange()">
                 <option value="">-</option>
                 <option value="A">A</option>
                 <option value="B">B</option>
@@ -203,52 +219,279 @@ function initAnswerKeyGrid() {
 }
 
 /**
- * Load answer key from file
+ * Load saved answer keys, refresh the list, the Process page dropdown and status
  */
-async function loadAnswerKeyFile() {
-    const result = await API.selectAnswerKeyFile();
+async function loadAnswerKeys() {
+    const result = await API.listAnswerKeys();
+    if (!result.success) {
+        showToast(result.message || 'Failed to load answer keys', 'error');
+        return;
+    }
 
-    if (result.success) {
-        AppState.answerKey = result.answers;
+    AppState.answerKeys = result.keys;
+    AppState.activeAnswerKeyId = result.active_id;
+    renderAnswerKeyList();
+    renderProcessAnswerKeyDropdown();
+    await refreshActiveAnswerKey();
+}
 
-        // Update grid
-        for (let q = 1; q <= 60; q++) {
-            const select = document.getElementById(`ak-${q}`);
-            if (select) {
-                select.value = result.answers[q] || '';
-            }
+/**
+ * Fetch the answers of the selected answer key (used to validate scoring)
+ */
+async function refreshActiveAnswerKey() {
+    AppState.answerKey = null;
+    if (AppState.activeAnswerKeyId) {
+        const result = await API.getSavedAnswerKey(AppState.activeAnswerKeyId);
+        if (result.success) {
+            AppState.answerKey = result.key.answers;
         }
+    }
+    updateAnswerKeyStatus();
+}
 
-        updateAnswerKeyCount();
-        updateAnswerKeyStatus();
-        showToast('Answer key loaded successfully', 'success');
-    } else {
-        showToast(result.message || 'Failed to load answer key', 'error');
+/**
+ * Render the table of saved answer keys
+ */
+function renderAnswerKeyList() {
+    const keys = AppState.answerKeys;
+    document.getElementById('ak-list-body').innerHTML = keys.map(k => `
+        <tr>
+            <td>
+                <span class="ak-name">${escapeHtml(k.name)}</span>
+                ${k.id === AppState.activeAnswerKeyId ? '<span class="ak-badge">Selected for processing</span>' : ''}
+            </td>
+            <td class="${k.filled_count === 60 ? 'ak-complete' : 'ak-incomplete'}">${k.filled_count} / 60</td>
+            <td>${escapeHtml(k.updated)}</td>
+            <td class="actions">
+                <button class="btn btn-primary btn-sm" onclick="openAnswerKeyEditor('${k.id}')">Open</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteAnswerKey('${k.id}')">Delete</button>
+            </td>
+        </tr>
+    `).join('');
+    document.getElementById('ak-list-empty').classList.toggle('hidden', keys.length > 0);
+}
+
+/**
+ * Fill the Process page answer key dropdown
+ */
+function renderProcessAnswerKeyDropdown() {
+    const select = document.getElementById('process-answer-key');
+    select.innerHTML = '<option value="">-- Select answer key --</option>' +
+        AppState.answerKeys.map(k =>
+            `<option value="${k.id}">${escapeHtml(k.name)} (${k.filled_count}/60)</option>`
+        ).join('');
+    select.value = AppState.activeAnswerKeyId || '';
+}
+
+/**
+ * Process page: select the answer key used for scoring
+ * @param {string} keyId - Answer key id ('' to clear)
+ */
+async function selectProcessAnswerKey(keyId) {
+    const result = await API.selectAnswerKey(keyId);
+    if (!result.success) {
+        showToast(result.message || 'Failed to select answer key', 'error');
+        document.getElementById('process-answer-key').value = AppState.activeAnswerKeyId || '';
+        return;
+    }
+
+    AppState.activeAnswerKeyId = keyId || null;
+    AppState.answerKey = result.key ? result.key.answers : null;
+    updateAnswerKeyStatus();
+    renderAnswerKeyList();
+}
+
+/**
+ * Show the "new answer key" form
+ */
+function showAnswerKeyCreate() {
+    document.getElementById('ak-create').classList.remove('hidden');
+    const input = document.getElementById('ak-new-name');
+    input.value = '';
+    input.focus();
+}
+
+/**
+ * Hide the "new answer key" form
+ */
+function hideAnswerKeyCreate() {
+    document.getElementById('ak-create').classList.add('hidden');
+}
+
+/**
+ * Enter saves the new answer key, Escape cancels
+ * @param {KeyboardEvent} event
+ */
+function answerKeyCreateKey(event) {
+    if (event.key === 'Enter') {
+        createAnswerKey();
+    } else if (event.key === 'Escape') {
+        hideAnswerKeyCreate();
     }
 }
 
 /**
- * Save answer key from grid
+ * Save a new (empty) answer key by name, then open it for editing
  */
-async function saveAnswerKey() {
-    const answers = {};
+async function createAnswerKey() {
+    const name = document.getElementById('ak-new-name').value.trim();
+    if (!name) {
+        showToast('Please enter an answer key name', 'warning');
+        return;
+    }
 
+    const result = await API.createAnswerKey(name);
+    if (!result.success) {
+        showToast(result.message || 'Failed to create answer key', 'error');
+        return;
+    }
+
+    AppState.answerKeys = result.keys;
+    hideAnswerKeyCreate();
+    renderAnswerKeyList();
+    renderProcessAnswerKeyDropdown();
+    showToast(`Answer key "${result.key.name}" saved`, 'success');
+    openAnswerKeyEditor(result.key.id);
+}
+
+/**
+ * Open a saved answer key in the editor
+ * @param {string} keyId
+ */
+async function openAnswerKeyEditor(keyId) {
+    const result = await API.getSavedAnswerKey(keyId);
+    if (!result.success) {
+        showToast(result.message || 'Failed to open answer key', 'error');
+        return;
+    }
+
+    const key = result.key;
+    AppState.editingAnswerKeyId = key.id;
+    document.getElementById('ak-editor-title').textContent = key.name;
+    document.getElementById('ak-edit-name').value = key.name;
+    setAnswerKeyGrid(key.answers);
+    setAnswerKeyDirty(false);
+
+    document.getElementById('ak-list-view').classList.add('hidden');
+    document.getElementById('ak-editor-view').classList.remove('hidden');
+}
+
+/**
+ * Leave the editor and go back to the list (asks if there are unsaved changes)
+ */
+function closeAnswerKeyEditor() {
+    if (AppState.answerKeyDirty && !confirm('Discard unsaved changes to this answer key?')) {
+        return;
+    }
+    AppState.editingAnswerKeyId = null;
+    setAnswerKeyDirty(false);
+    document.getElementById('ak-editor-view').classList.add('hidden');
+    document.getElementById('ak-list-view').classList.remove('hidden');
+}
+
+/**
+ * Import answers from a file into the open answer key (saved on Save Changes)
+ */
+async function importAnswersIntoEditor() {
+    const result = await API.importAnswersFromFile();
+    if (!result.success) {
+        if (result.message !== 'No file selected') {
+            showToast(result.message || 'Failed to import answers', 'error');
+        }
+        return;
+    }
+
+    setAnswerKeyGrid(result.answers);
+    setAnswerKeyDirty(true);
+    showToast(`Imported ${result.filled_count} answers - click Save Changes to keep them`, 'success');
+}
+
+/**
+ * Save the name and answers of the open answer key
+ */
+async function saveAnswerKeyChanges() {
+    const name = document.getElementById('ak-edit-name').value.trim();
+    if (!name) {
+        showToast('Please enter an answer key name', 'warning');
+        return;
+    }
+
+    const answers = {};
     for (let q = 1; q <= 60; q++) {
-        const select = document.getElementById(`ak-${q}`);
-        if (select && select.value) {
-            answers[q] = select.value;
+        const value = document.getElementById(`ak-${q}`).value;
+        if (value) {
+            answers[q] = value;
         }
     }
 
-    const result = await API.setManualAnswerKey(answers);
+    const result = await API.updateAnswerKey(AppState.editingAnswerKeyId, name, answers);
+    if (!result.success) {
+        showToast(result.message || 'Failed to save answer key', 'error');
+        return;
+    }
 
-    if (result.success) {
+    AppState.answerKeys = result.keys;
+    document.getElementById('ak-editor-title').textContent = result.key.name;
+    setAnswerKeyDirty(false);
+    renderAnswerKeyList();
+    renderProcessAnswerKeyDropdown();
+    if (AppState.editingAnswerKeyId === AppState.activeAnswerKeyId) {
         AppState.answerKey = answers;
         updateAnswerKeyStatus();
-        showToast('Answer key saved', 'success');
-    } else {
-        showToast(result.message || 'Failed to save answer key', 'error');
     }
+    showToast(`Answer key "${result.key.name}" saved (${result.key.filled_count}/60)`, 'success');
+}
+
+/**
+ * Delete a saved answer key after confirmation
+ * @param {string} keyId
+ */
+async function deleteAnswerKey(keyId) {
+    const key = AppState.answerKeys.find(k => k.id === keyId);
+    if (!confirm(`Delete answer key "${key ? key.name : ''}"?`)) {
+        return;
+    }
+
+    const result = await API.deleteAnswerKey(keyId);
+    if (!result.success) {
+        showToast(result.message || 'Failed to delete answer key', 'error');
+        return;
+    }
+
+    AppState.answerKeys = result.keys;
+    AppState.activeAnswerKeyId = result.active_id;
+    renderAnswerKeyList();
+    renderProcessAnswerKeyDropdown();
+    await refreshActiveAnswerKey();
+    showToast('Answer key deleted', 'success');
+}
+
+/**
+ * Put answers into the editor grid
+ * @param {Object} answers - {"1": "A", ...}
+ */
+function setAnswerKeyGrid(answers) {
+    for (let q = 1; q <= 60; q++) {
+        document.getElementById(`ak-${q}`).value = (answers && answers[q]) || '';
+    }
+    updateAnswerKeyCount();
+}
+
+/**
+ * Grid edited by hand
+ */
+function onAnswerKeyGridChange() {
+    updateAnswerKeyCount();
+    setAnswerKeyDirty(true);
+}
+
+/**
+ * Track unsaved changes in the editor
+ * @param {boolean} dirty
+ */
+function setAnswerKeyDirty(dirty) {
+    AppState.answerKeyDirty = dirty;
+    document.getElementById('ak-unsaved').classList.toggle('hidden', !dirty);
 }
 
 /**
@@ -266,66 +509,21 @@ function updateAnswerKeyCount() {
 }
 
 /**
- * Load answer key status
- */
-async function loadAnswerKeyStatus() {
-    // First, try to load saved answer key from previous session
-    try {
-        const savedResult = await API.loadSavedAnswerKey();
-
-        if (savedResult.success) {
-            console.log('Loaded saved answer key:', savedResult.name || 'Unnamed');
-            AppState.answerKey = savedResult.answers;
-
-            // Update grid with saved answers
-            for (let q = 1; q <= 60; q++) {
-                const select = document.getElementById(`ak-${q}`);
-                if (select && savedResult.answers[q]) {
-                    select.value = savedResult.answers[q];
-                }
-            }
-
-            updateAnswerKeyCount();
-            updateAnswerKeyStatus();
-            return;
-        }
-    } catch (e) {
-        console.log('No saved answer key found:', e);
-    }
-
-    // Fall back to checking current answer key
-    const result = await API.getAnswerKey();
-
-    if (result.success) {
-        AppState.answerKey = result.answers;
-
-        // Update grid
-        for (let q = 1; q <= 60; q++) {
-            const select = document.getElementById(`ak-${q}`);
-            if (select && result.answers[q]) {
-                select.value = result.answers[q];
-            }
-        }
-
-        updateAnswerKeyCount();
-    }
-
-    updateAnswerKeyStatus();
-}
-
-/**
- * Update answer key status display
+ * Update the Process page answer key status for the selected key
  */
 function updateAnswerKeyStatus() {
     const statusBox = document.getElementById('answer-key-status');
+    const key = AppState.answerKeys.find(k => k.id === AppState.activeAnswerKeyId);
 
-    if (AppState.answerKey && Object.keys(AppState.answerKey).length > 0) {
+    if (key && AppState.answerKey) {
         const count = Object.values(AppState.answerKey).filter(v => v).length;
         statusBox.className = 'status-box ' + (count === 60 ? 'success' : 'warning');
-        statusBox.textContent = `Answer key loaded: ${count}/60 answers`;
+        statusBox.textContent = count === 60
+            ? `Answer key "${key.name}" loaded: ${count}/60 answers`
+            : `Answer key "${key.name}" is incomplete: ${count}/60 answers`;
     } else {
         statusBox.className = 'status-box warning';
-        statusBox.textContent = 'No answer key loaded';
+        statusBox.textContent = 'No answer key selected';
     }
 }
 
@@ -853,6 +1051,173 @@ function updateSortIcons() {
     }
 }
 
+// ==================== School Codes ====================
+
+/**
+ * Load the school code list from the backend
+ */
+async function loadSchoolCodes() {
+    const result = await API.getSchoolCodes();
+    if (result.success) {
+        AppState.schools = result.schools;
+        renderSchoolCodes();
+    } else {
+        showToast(result.message || 'Failed to load school codes', 'error');
+    }
+}
+
+/**
+ * Render the school table, applying the search filter
+ */
+function renderSchoolCodes() {
+    const searchInput = document.getElementById('school-search');
+    const query = searchInput.value.trim().toLowerCase();
+    document.getElementById('school-search-clear').classList.toggle('hidden', searchInput.value === '');
+    const schools = AppState.schools.filter(s =>
+        !query || s.code.includes(query) || s.name.toLowerCase().includes(query)
+    );
+
+    document.getElementById('school-body').innerHTML = schools.map(s => `
+        <tr>
+            <td class="code">${escapeHtml(s.code)}</td>
+            <td>${escapeHtml(s.name)}</td>
+            <td class="actions">
+                <button class="btn btn-secondary btn-sm" onclick="showSchoolForm('${escapeHtml(s.code)}')">Edit</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteSchoolCode('${escapeHtml(s.code)}')">Delete</button>
+            </td>
+        </tr>
+    `).join('');
+
+    document.getElementById('school-empty').classList.toggle('hidden', schools.length > 0);
+    const total = AppState.schools.length;
+    document.getElementById('school-count').textContent = query
+        ? `${schools.length} of ${total} schools`
+        : `${total} schools`;
+}
+
+/**
+ * Clear the school search and show the full list
+ */
+function clearSchoolSearch() {
+    const searchInput = document.getElementById('school-search');
+    searchInput.value = '';
+    renderSchoolCodes();
+    searchInput.focus();
+}
+
+/**
+ * Show the add/edit form
+ * @param {string} [code] - Code of the school to edit; omit to add a new one
+ */
+function showSchoolForm(code) {
+    const school = code ? AppState.schools.find(s => s.code === code) : null;
+    AppState.editingSchoolCode = school ? school.code : null;
+
+    document.getElementById('school-form-title').textContent = school ? `Edit School ${school.code}` : 'Add School';
+    document.getElementById('school-code-input').value = school ? school.code : '';
+    document.getElementById('school-name-input').value = school ? school.name : '';
+    document.getElementById('school-form').classList.remove('hidden');
+    document.getElementById(school ? 'school-name-input' : 'school-code-input').focus();
+}
+
+/**
+ * Hide the add/edit form
+ */
+function hideSchoolForm() {
+    AppState.editingSchoolCode = null;
+    document.getElementById('school-form').classList.add('hidden');
+}
+
+/**
+ * Enter saves the form, Escape cancels it
+ * @param {KeyboardEvent} event
+ */
+function schoolFormKey(event) {
+    if (event.key === 'Enter') {
+        saveSchoolCode();
+    } else if (event.key === 'Escape') {
+        hideSchoolForm();
+    }
+}
+
+/**
+ * Save the school in the form (add or update)
+ */
+async function saveSchoolCode() {
+    const code = document.getElementById('school-code-input').value.trim();
+    const name = document.getElementById('school-name-input').value.trim();
+
+    if (!/^\d+$/.test(code)) {
+        showToast('School code must be a number', 'warning');
+        return;
+    }
+    if (!name) {
+        showToast('Please enter the school name', 'warning');
+        return;
+    }
+
+    const result = await API.saveSchoolCode(code, name, AppState.editingSchoolCode);
+    if (result.success) {
+        AppState.schools = result.schools;
+        hideSchoolForm();
+        renderSchoolCodes();
+        showToast(`School ${parseInt(code, 10)} saved`, 'success');
+    } else {
+        showToast(result.message || 'Failed to save school', 'error');
+    }
+}
+
+/**
+ * Delete a school after confirmation
+ * @param {string} code - School code
+ */
+async function deleteSchoolCode(code) {
+    const school = AppState.schools.find(s => s.code === code);
+    if (!confirm(`Delete school ${code}${school ? ` (${school.name})` : ''}?`)) {
+        return;
+    }
+
+    const result = await API.deleteSchoolCode(code);
+    if (result.success) {
+        AppState.schools = result.schools;
+        if (AppState.editingSchoolCode === code) {
+            hideSchoolForm();
+        }
+        renderSchoolCodes();
+        showToast(`School ${code} deleted`, 'success');
+    } else {
+        showToast(result.message || 'Failed to delete school', 'error');
+    }
+}
+
+/**
+ * Import school codes from an Excel file (adds new codes, updates existing)
+ */
+async function importSchoolCodes() {
+    const result = await API.importSchoolCodesFile();
+    if (result.success) {
+        AppState.schools = result.schools;
+        renderSchoolCodes();
+        showToast(result.message, 'success');
+    } else if (result.message !== 'No file selected') {
+        showToast(result.message || 'Import failed', 'error');
+    }
+}
+
+/**
+ * Escape text for safe insertion into HTML
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeHtml(text) {
+    return String(text ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // ==================== Settings ====================
 
 /**
@@ -941,8 +1306,17 @@ function showToast(message, type = 'info') {
 window.navigateTo = navigateTo;
 window.selectInputFolder = selectInputFolder;
 window.selectOutputFile = selectOutputFile;
-window.loadAnswerKeyFile = loadAnswerKeyFile;
-window.saveAnswerKey = saveAnswerKey;
+window.showAnswerKeyCreate = showAnswerKeyCreate;
+window.hideAnswerKeyCreate = hideAnswerKeyCreate;
+window.answerKeyCreateKey = answerKeyCreateKey;
+window.createAnswerKey = createAnswerKey;
+window.openAnswerKeyEditor = openAnswerKeyEditor;
+window.closeAnswerKeyEditor = closeAnswerKeyEditor;
+window.importAnswersIntoEditor = importAnswersIntoEditor;
+window.saveAnswerKeyChanges = saveAnswerKeyChanges;
+window.deleteAnswerKey = deleteAnswerKey;
+window.selectProcessAnswerKey = selectProcessAnswerKey;
+window.onAnswerKeyGridChange = onAnswerKeyGridChange;
 window.startProcessing = startProcessing;
 window.cancelProcessing = cancelProcessing;
 window.exportResults = exportResults;
@@ -952,3 +1326,11 @@ window.openModal = openModal;
 window.closeModal = closeModal;
 window.updateAnswerKeyCount = updateAnswerKeyCount;
 window.sortResults = sortResults;
+window.renderSchoolCodes = renderSchoolCodes;
+window.clearSchoolSearch = clearSchoolSearch;
+window.showSchoolForm = showSchoolForm;
+window.hideSchoolForm = hideSchoolForm;
+window.saveSchoolCode = saveSchoolCode;
+window.schoolFormKey = schoolFormKey;
+window.deleteSchoolCode = deleteSchoolCode;
+window.importSchoolCodes = importSchoolCodes;

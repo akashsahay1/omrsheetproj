@@ -11,6 +11,7 @@ from openpyxl.utils import get_column_letter
 
 from src.models.result import ProcessingResult, EvaluationResult, BatchResult
 from src.models.candidate import Candidate
+from src.services.school_registry import SchoolRegistry
 from src.utils.logging_utils import get_logger
 
 logger = get_logger('excel_exporter')
@@ -117,9 +118,12 @@ class ExcelExporter:
         ws = wb.active
         ws.title = "Results"
 
-        # Merge headers only across main data columns (A to O = 15 columns)
+        # Merge headers only across main data columns (A to P = 16 columns)
         # This keeps headers centered and visible without scrolling
-        header_merge_col = 'O'  # S.No. to Rank (15 columns including Filename and Confidence)
+        header_merge_col = 'P'  # S.No. to Rank (16 columns including Filename and Confidence)
+
+        # School names come from the School Codes list (managed in the app)
+        schools = SchoolRegistry()
 
         # ========== ORGANIZATION HEADER ROWS ==========
 
@@ -156,10 +160,11 @@ class ExcelExporter:
         header_row = 7
 
         # Column order with Confidence after Filename:
-        # S.No., Filename, Confidence, Name, School Code, Class, Section, Roll No., Total Score, Percentage,
-        # Correct, Wrong, Unanswered, Multi-Marked, Rank, Q1-Q60
+        # S.No., Filename, Confidence, Name, School Code, School Name, Class, Section, Roll No.,
+        # Total Score, Percentage, Correct, Wrong, Unanswered, Multi-Marked, Rank, Q1-Q60
         headers = [
-            "S.No.", "Filename", "Conf %", "Name", "School Code", "Class", "Section", "Roll No.",
+            "S.No.", "Filename", "Conf %", "Name", "School Code", "School Name",
+            "Class", "Section", "Roll No.",
             "Total Score", "Percentage", "Correct", "Wrong", "Unanswered",
             "Multi-Marked", "Rank"
         ]
@@ -218,38 +223,40 @@ class ExcelExporter:
             ws.cell(row=data_row, column=4, value=candidate.name)
             # 5: School Code
             ws.cell(row=data_row, column=5, value=candidate.school_code)
-            # 6: Class
-            ws.cell(row=data_row, column=6, value=candidate.class_)
-            # 7: Section
-            ws.cell(row=data_row, column=7, value=candidate.section)
-            # 8: Roll No.
-            ws.cell(row=data_row, column=8, value=candidate.roll_number)
-            # 9: Total Score
-            ws.cell(row=data_row, column=9, value=result.total_score)
-            # 10: Percentage
-            ws.cell(row=data_row, column=10, value=f"{result.percentage}%")
-            # 11: Correct
-            ws.cell(row=data_row, column=11, value=result.correct_count)
-            # 12: Wrong
-            ws.cell(row=data_row, column=12, value=result.wrong_count)
-            # 13: Unanswered
-            ws.cell(row=data_row, column=13, value=result.unanswered_count)
-            # 14: Multi-Marked
-            ws.cell(row=data_row, column=14, value=result.multi_marked_count)
-            # 15: Rank
-            ws.cell(row=data_row, column=15, value=result.rank)
+            # 6: School Name (looked up from the School Codes list)
+            ws.cell(row=data_row, column=6, value=schools.get_name(candidate.school_code))
+            # 7: Class
+            ws.cell(row=data_row, column=7, value=candidate.class_)
+            # 8: Section
+            ws.cell(row=data_row, column=8, value=candidate.section)
+            # 9: Roll No.
+            ws.cell(row=data_row, column=9, value=candidate.roll_number)
+            # 10: Total Score
+            ws.cell(row=data_row, column=10, value=result.total_score)
+            # 11: Percentage
+            ws.cell(row=data_row, column=11, value=f"{result.percentage}%")
+            # 12: Correct
+            ws.cell(row=data_row, column=12, value=result.correct_count)
+            # 13: Wrong
+            ws.cell(row=data_row, column=13, value=result.wrong_count)
+            # 14: Unanswered
+            ws.cell(row=data_row, column=14, value=result.unanswered_count)
+            # 15: Multi-Marked
+            ws.cell(row=data_row, column=15, value=result.multi_marked_count)
+            # 16: Rank
+            ws.cell(row=data_row, column=16, value=result.rank)
 
             # Apply formatting to all data columns
-            for col in range(1, 16):
+            for col in range(1, 17):
                 cell = ws.cell(row=data_row, column=col)
                 cell.border = self.thin_border
-                if col not in (2, 4):  # All centered except Filename and Name columns
+                if col not in (2, 4, 6):  # All centered except Filename, Name and School Name
                     cell.alignment = self.center_align
 
-            # Add answers if requested (columns 16-75 for Q1-Q60)
+            # Add answers if requested (columns 17-76 for Q1-Q60)
             if include_answers:
                 for q in range(1, 61):
-                    col = 15 + q
+                    col = 16 + q
                     answer = candidate.get_answer(q)
                     cell = ws.cell(row=data_row, column=col, value=answer)
                     cell.alignment = self.center_align
@@ -362,9 +369,12 @@ class ExcelExporter:
             ws = wb.active
             ws.title = "Extracted Data"
 
+            schools = SchoolRegistry()
+
             # Headers with Confidence after Filename
             headers = [
-                "S.No.", "Filename", "Conf %", "Name", "Roll No.", "Class", "Section", "School Code"
+                "S.No.", "Filename", "Conf %", "Name", "Roll No.", "Class", "Section",
+                "School Code", "School Name"
             ]
             for q in range(1, 61):
                 headers.append(f"Q{q}")
@@ -401,9 +411,10 @@ class ExcelExporter:
                 ws.cell(row=row_idx, column=6, value=candidate.class_)
                 ws.cell(row=row_idx, column=7, value=candidate.section)
                 ws.cell(row=row_idx, column=8, value=candidate.school_code)
+                ws.cell(row=row_idx, column=9, value=schools.get_name(candidate.school_code))
 
                 for q in range(1, 61):
-                    ws.cell(row=row_idx, column=8 + q, value=candidate.get_answer(q))
+                    ws.cell(row=row_idx, column=9 + q, value=candidate.get_answer(q))
 
             self._auto_adjust_columns(ws)
             ws.freeze_panes = "A2"

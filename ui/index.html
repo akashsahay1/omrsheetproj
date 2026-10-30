@@ -30,7 +30,11 @@
                 </li>
                 <li class="nav-item" data-page="answer-key">
                     <span class="nav-icon">&#128221;</span>
-                    <span>Answer Key</span>
+                    <span>Answer Keys</span>
+                </li>
+                <li class="nav-item" data-page="school-codes">
+                    <span class="nav-icon">&#127979;</span>
+                    <span>School Codes</span>
                 </li>
                 <li class="nav-item" data-page="settings">
                     <span class="nav-icon">&#9881;</span>
@@ -64,14 +68,14 @@
                     </div>
                     <div class="card action-card" onclick="navigateTo('answer-key')">
                         <div class="card-icon">&#128221;</div>
-                        <h3>Answer Key</h3>
-                        <p>Configure answer key for scoring</p>
+                        <h3>Answer Keys</h3>
+                        <p>Save answer keys for each exam</p>
                     </div>
                 </div>
                 <div class="info-section">
                     <h3>Quick Start Guide</h3>
                     <ol>
-                        <li>Set up your Answer Key (required for scoring)</li>
+                        <li>Save the exam's Answer Key and select it on Process Sheets (required for scoring)</li>
                         <li>Select a folder containing scanned OMR sheets</li>
                         <li>Start processing and monitor progress</li>
                         <li>Export results to Excel</li>
@@ -129,6 +133,14 @@
                             <input type="checkbox" id="with-scoring" checked>
                             Enable Scoring (requires answer key)
                         </label>
+                    </div>
+
+                    <!-- Answer Key -->
+                    <div class="form-group">
+                        <label for="process-answer-key">Answer Key</label>
+                        <select id="process-answer-key" class="form-select" onchange="selectProcessAnswerKey(this.value)">
+                            <option value="">-- Select answer key --</option>
+                        </select>
                     </div>
 
                     <!-- Answer Key Status -->
@@ -235,20 +247,132 @@
 
             <!-- Answer Key Page -->
             <section id="page-answer-key" class="page">
-                <div class="page-header">
-                    <h1>Answer Key</h1>
-                    <div class="page-actions">
-                        <button class="btn btn-secondary" onclick="loadAnswerKeyFile()">Import from File</button>
-                        <button class="btn btn-primary" onclick="saveAnswerKey()">Save Answer Key</button>
+                <!-- List of saved answer keys -->
+                <div id="ak-list-view">
+                    <div class="page-header">
+                        <div>
+                            <h1>Answer Keys</h1>
+                            <p>Save one answer key per exam, then pick it on the Process Sheets page.</p>
+                        </div>
+                        <div class="page-actions">
+                            <button class="btn btn-primary" onclick="showAnswerKeyCreate()">+ Add Answer Key</button>
+                        </div>
+                    </div>
+
+                    <div id="ak-create" class="card ak-create hidden">
+                        <h3>New Answer Key</h3>
+                        <div class="form-group">
+                            <label for="ak-new-name">Answer Key Name</label>
+                            <input type="text" id="ak-new-name" placeholder="e.g. Chayan Kishore Prarambhik 2026-27" onkeydown="answerKeyCreateKey(event)">
+                        </div>
+                        <div class="ak-create-actions">
+                            <button class="btn btn-primary" onclick="createAnswerKey()">Save</button>
+                            <button class="btn btn-secondary" onclick="hideAnswerKeyCreate()">Cancel</button>
+                        </div>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="data-table ak-table">
+                            <thead>
+                                <tr>
+                                    <th>Answer Key Name</th>
+                                    <th class="col-filled">Answers</th>
+                                    <th class="col-updated">Last Saved</th>
+                                    <th class="col-actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ak-list-body">
+                            </tbody>
+                        </table>
+                        <div id="ak-list-empty" class="empty-state hidden">
+                            <p>No answer keys saved yet.</p>
+                            <p>Click "+ Add Answer Key" to create one.</p>
+                        </div>
                     </div>
                 </div>
 
-                <div class="answer-key-grid" id="answer-key-grid">
-                    <!-- Grid will be populated by JS -->
+                <!-- Editor for one saved answer key -->
+                <div id="ak-editor-view" class="hidden">
+                    <div class="page-header">
+                        <div>
+                            <button class="btn-link" onclick="closeAnswerKeyEditor()">&larr; All answer keys</button>
+                            <h1 id="ak-editor-title">Answer Key</h1>
+                        </div>
+                        <div class="page-actions">
+                            <button class="btn btn-secondary" onclick="importAnswersIntoEditor()">Import from File</button>
+                            <button class="btn btn-primary" onclick="saveAnswerKeyChanges()">Save Changes</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group ak-name-field">
+                        <label for="ak-edit-name">Answer Key Name</label>
+                        <input type="text" id="ak-edit-name">
+                    </div>
+
+                    <div class="answer-key-grid" id="answer-key-grid">
+                        <!-- Grid will be populated by JS -->
+                    </div>
+
+                    <div class="answer-key-summary">
+                        <p>Filled: <span id="ak-filled">0</span> / 60 <span id="ak-unsaved" class="ak-unsaved hidden">&bull; Unsaved changes</span></p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- School Codes Page -->
+            <section id="page-school-codes" class="page">
+                <div class="page-header">
+                    <div>
+                        <h1>School Codes</h1>
+                        <p>School names are filled into the result Excel by matching the School Code.</p>
+                    </div>
+                    <div class="page-actions">
+                        <button class="btn btn-secondary" onclick="importSchoolCodes()">Import from Excel</button>
+                        <button class="btn btn-primary" onclick="showSchoolForm()">+ Add School</button>
+                    </div>
                 </div>
 
-                <div class="answer-key-summary">
-                    <p>Filled: <span id="ak-filled">0</span> / 60</p>
+                <div id="school-form" class="card school-form hidden">
+                    <h3 id="school-form-title">Add School</h3>
+                    <div class="school-form-row">
+                        <div class="form-group school-code-field">
+                            <label for="school-code-input">School Code</label>
+                            <input type="text" id="school-code-input" inputmode="numeric" maxlength="3" placeholder="e.g. 25" onkeydown="schoolFormKey(event)">
+                        </div>
+                        <div class="form-group school-name-field">
+                            <label for="school-name-input">School Name</label>
+                            <input type="text" id="school-name-input" placeholder="e.g. Jamtara , S.S.V.M" onkeydown="schoolFormKey(event)">
+                        </div>
+                    </div>
+                    <div class="school-form-actions">
+                        <button class="btn btn-primary" onclick="saveSchoolCode()">Save</button>
+                        <button class="btn btn-secondary" onclick="hideSchoolForm()">Cancel</button>
+                    </div>
+                </div>
+
+                <div class="school-toolbar">
+                    <div class="search-box school-search">
+                        <input type="text" id="school-search" placeholder="Search by code or school name" oninput="renderSchoolCodes()" onkeydown="if (event.key === 'Escape') clearSchoolSearch()">
+                        <button type="button" id="school-search-clear" class="search-clear hidden" title="Clear search" onclick="clearSchoolSearch()">&times;</button>
+                    </div>
+                    <span id="school-count" class="school-count">0 schools</span>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table school-table">
+                        <thead>
+                            <tr>
+                                <th class="col-code">Code</th>
+                                <th>School Name</th>
+                                <th class="col-actions">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="school-body">
+                        </tbody>
+                    </table>
+                    <div id="school-empty" class="empty-state hidden">
+                        <p>No schools found.</p>
+                    </div>
                 </div>
             </section>
 

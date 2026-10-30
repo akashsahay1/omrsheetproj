@@ -47,29 +47,33 @@ const API = {
         return this.call('select_output_file');
     },
 
-    async selectAnswerKeyFile() {
-        return this.call('select_answer_key_file');
+    // Answer Keys (saved by exam name)
+    async listAnswerKeys() {
+        return this.call('list_answer_keys');
     },
 
-    // Answer Key
-    async loadAnswerKey(filePath) {
-        return this.call('load_answer_key', filePath);
+    async createAnswerKey(name) {
+        return this.call('create_answer_key', name);
     },
 
-    async setManualAnswerKey(answers) {
-        return this.call('set_manual_answer_key', answers);
+    async getSavedAnswerKey(keyId) {
+        return this.call('get_saved_answer_key', keyId);
     },
 
-    async getAnswerKey() {
-        return this.call('get_answer_key');
+    async updateAnswerKey(keyId, name, answers) {
+        return this.call('update_answer_key', keyId, name, answers);
     },
 
-    async loadSavedAnswerKey() {
-        return this.call('load_saved_answer_key');
+    async deleteAnswerKey(keyId) {
+        return this.call('delete_answer_key', keyId);
     },
 
-    async clearSavedAnswerKey() {
-        return this.call('clear_saved_answer_key');
+    async selectAnswerKey(keyId) {
+        return this.call('select_answer_key', keyId);
+    },
+
+    async importAnswersFromFile() {
+        return this.call('import_answers_from_file');
     },
 
     // Processing
@@ -108,6 +112,23 @@ const API = {
 
     async exportResults(outputPath, examLevel, examType) {
         return this.call('export_results', outputPath, examLevel, examType);
+    },
+
+    // School Codes
+    async getSchoolCodes() {
+        return this.call('get_school_codes');
+    },
+
+    async saveSchoolCode(code, name, originalCode) {
+        return this.call('save_school_code', code, name, originalCode);
+    },
+
+    async deleteSchoolCode(code) {
+        return this.call('delete_school_code', code);
+    },
+
+    async importSchoolCodesFile() {
+        return this.call('import_school_codes_file');
     },
 
     // Settings

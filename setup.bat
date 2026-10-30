@@ -9,9 +9,10 @@ REM Change to script directory
 cd /d "%~dp0"
 
 REM Check if venv exists
-if not exist "venv" (
+if not exist "venv311" (
     echo Creating virtual environment...
-    python -m venv venv
+    REM Prefer Python 3.11 via the py launcher; fall back to python on PATH
+    py -3.11 -m venv venv311 2>nul || python -m venv venv311
     if errorlevel 1 (
         echo ERROR: Failed to create virtual environment
         echo Make sure Python 3.8+ is installed and in PATH
@@ -21,7 +22,7 @@ if not exist "venv" (
 )
 
 echo Activating virtual environment...
-call venv\Scripts\activate.bat
+call venv311\Scripts\activate.bat
 
 echo.
 echo Installing dependencies...
@@ -42,6 +43,6 @@ echo.
 echo To run the application:
 echo   1. Double-click run.bat
 echo   OR
-echo   2. Run: venv\Scripts\python src\main.py
+echo   2. Run: venv311\Scripts\python src\main.py
 echo.
 pause

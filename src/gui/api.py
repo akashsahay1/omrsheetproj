@@ -11,6 +11,8 @@ from src.core.ml_engine import MLEngine
 from src.services.batch_processor import BatchProcessor, ProcessingProgress
 from src.services.scorer import Scorer
 from src.services.excel_exporter import ExcelExporter
+from src.services.school_registry import SchoolRegistry
+from src.services.answer_key_store import AnswerKeyStore
 from src.models.answer_key import AnswerKey
 from src.models.result import EvaluationResult
 from src.config.settings import Settings
@@ -42,12 +44,19 @@ class OMRApi:
         self._batch_processor = BatchProcessor(self._engine)
         self._scorer = Scorer()
         self._exporter = ExcelExporter()
+        self._schools = SchoolRegistry()
+        # Named answer keys; the single key saved by older versions is migrated
+        self._answer_keys = AnswerKeyStore(legacy_key=self._settings.saved_answer_key)
 
         # State
         self._current_results: List[EvaluationResult] = []
         self._answer_key: Optional[AnswerKey] = None
         self._exam_level: str = 'Anshik'
         self._exam_type: str = 'Chayan'
+
+        # Restore the answer key selected in the previous session
+        if self._answer_keys.active_id:
+            self._apply_answer_key(self._answer_keys.active_id)
 
     def set_window(self, window: webview.Window) -> None:
         """Set window reference"""
@@ -152,8 +161,75 @@ class OMRApi:
             logger.error(f"File selection error: {e}")
             return {'success': False, 'message': str(e)}
 
-    def select_answer_key_file(self) -> Dict[str, Any]:
-        """Open file picker for answer key"""
+    # === Answer Key Operations ===
+
+    def list_answer_keys(self) -> Dict[str, Any]:
+        """All saved answer keys (name, filled count) and the selected one"""
+        return {
+            'success': True,
+            'keys': self._answer_keys.list(),
+            'active_id': self._answer_keys.active_id
+        }
+
+    def create_answer_key(self, name: str) -> Dict[str, Any]:
+        """Create a new, empty answer key with the given exam name"""
+        try:
+            key, message = self._answer_keys.create(name)
+            return {'success': key is not None, 'message': message, 'key': key,
+                    'keys': self._answer_keys.list()}
+        except Exception as e:
+            logger.error(f"Create answer key error: {e}")
+            return {'success': False, 'message': str(e)}
+
+    def get_saved_answer_key(self, key_id: str) -> Dict[str, Any]:
+        """Full answer key (with answers) for the editor"""
+        key = self._answer_keys.get(key_id)
+        if key is None:
+            return {'success': False, 'message': 'Answer key not found'}
+        return {'success': True, 'key': key}
+
+    def update_answer_key(self, key_id: str, name: str, answers: Dict[str, str]) -> Dict[str, Any]:
+        """Save changes (name and answers) to a saved answer key"""
+        try:
+            key, message = self._answer_keys.update(key_id, name, answers)
+            if key is not None and key_id == self._answer_keys.active_id:
+                self._apply_answer_key(key_id)  # keep scoring in sync with edits
+            return {'success': key is not None, 'message': message, 'key': key,
+                    'keys': self._answer_keys.list()}
+        except Exception as e:
+            logger.error(f"Update answer key error: {e}")
+            return {'success': False, 'message': str(e)}
+
+    def delete_answer_key(self, key_id: str) -> Dict[str, Any]:
+        """Delete a saved answer key"""
+        try:
+            was_active = key_id == self._answer_keys.active_id
+            ok, message = self._answer_keys.delete(key_id)
+            if ok and was_active:
+                self._apply_answer_key(None)
+            return {'success': ok, 'message': message, 'keys': self._answer_keys.list(),
+                    'active_id': self._answer_keys.active_id}
+        except Exception as e:
+            logger.error(f"Delete answer key error: {e}")
+            return {'success': False, 'message': str(e)}
+
+    def select_answer_key(self, key_id: Optional[str]) -> Dict[str, Any]:
+        """Select the answer key used for scoring (empty to clear)"""
+        try:
+            if not self._answer_keys.set_active(key_id or None):
+                return {'success': False, 'message': 'Answer key not found'}
+            self._apply_answer_key(key_id or None)
+            key = self._answer_keys.get(key_id) if key_id else None
+            return {'success': True, 'key': key}
+        except Exception as e:
+            logger.error(f"Select answer key error: {e}")
+            return {'success': False, 'message': str(e)}
+
+    def import_answers_from_file(self) -> Dict[str, Any]:
+        """
+        Pick an answer key file (.xlsx/.csv/.json) and return its answers.
+        Nothing is saved until the user clicks Save Changes.
+        """
         try:
             result = self._window.create_file_dialog(
                 webview.OPEN_DIALOG,
@@ -165,119 +241,69 @@ class OMRApi:
                     'JSON Files (*.json)'
                 )
             )
+            if not result:
+                return {'success': False, 'message': 'No file selected'}
 
-            if result and len(result) > 0:
-                path = result[0]
-                return self.load_answer_key(path)
-
-            return {'success': False, 'message': 'No file selected'}
-
+            path = result[0]
+            imported = AnswerKey.from_file(path)
+            self._settings.last_answer_key_path = str(Path(path).parent)
+            self._settings.save()
+            answers = {str(q): a for q, a in imported.answers.items() if a}
+            return {'success': True, 'answers': answers, 'filled_count': len(answers)}
         except Exception as e:
-            logger.error(f"Answer key selection error: {e}")
+            logger.error(f"Import answers error: {e}")
             return {'success': False, 'message': str(e)}
 
-    # === Answer Key Operations ===
+    def _apply_answer_key(self, key_id: Optional[str]) -> None:
+        """Hand the selected answer key to the scorer and batch processor"""
+        self._answer_key = self._answer_keys.to_answer_key(key_id) if key_id else None
+        self._scorer.set_answer_key(self._answer_key)
+        self._batch_processor.set_answer_key(self._answer_key)
 
-    def load_answer_key(self, file_path: str) -> Dict[str, Any]:
-        """Load answer key from file and auto-save to settings"""
+    # === School Code Operations ===
+
+    def get_school_codes(self) -> Dict[str, Any]:
+        """List all school codes with names"""
+        return {'success': True, 'schools': self._schools.list()}
+
+    def save_school_code(self, code: str, name: str,
+                         original_code: Optional[str] = None) -> Dict[str, Any]:
+        """Add a school code, or update one (original_code = code before editing)"""
         try:
-            self._answer_key = AnswerKey.from_file(file_path)
-            self._scorer.set_answer_key(self._answer_key)
-            self._batch_processor.set_answer_key(self._answer_key)
-
-            self._settings.last_answer_key_path = file_path
-
-            # Auto-save the answer key content (not just the path)
-            self._settings.save_answer_key(self._answer_key)
-
-            return {
-                'success': True,
-                'path': file_path,
-                'filled_count': self._answer_key.get_filled_count(),
-                'is_complete': self._answer_key.is_complete(),
-                'answers': self._answer_key.answers,
-                'name': getattr(self._answer_key, 'name', '')
-            }
-
+            ok, message = self._schools.save_school(code, name, original_code)
+            return {'success': ok, 'message': message, 'schools': self._schools.list()}
         except Exception as e:
-            logger.error(f"Answer key load error: {e}")
+            logger.error(f"Save school code error: {e}")
             return {'success': False, 'message': str(e)}
 
-    def set_manual_answer_key(self, answers: Dict[str, str]) -> Dict[str, Any]:
-        """Set answer key from manual input and auto-save"""
+    def delete_school_code(self, code: str) -> Dict[str, Any]:
+        """Delete a school code"""
         try:
-            self._answer_key = AnswerKey()
-
-            for q_str, answer in answers.items():
-                q_num = int(q_str)
-                self._answer_key.set_answer(q_num, answer.upper())
-
-            self._scorer.set_answer_key(self._answer_key)
-            self._batch_processor.set_answer_key(self._answer_key)
-
-            # Auto-save the manually entered answer key
-            self._answer_key.name = "Manual Entry"
-            self._settings.save_answer_key(self._answer_key)
-
-            return {
-                'success': True,
-                'filled_count': self._answer_key.get_filled_count(),
-                'is_complete': self._answer_key.is_complete()
-            }
-
+            ok, message = self._schools.delete_school(code)
+            return {'success': ok, 'message': message, 'schools': self._schools.list()}
         except Exception as e:
-            logger.error(f"Manual answer key error: {e}")
+            logger.error(f"Delete school code error: {e}")
             return {'success': False, 'message': str(e)}
 
-    def get_answer_key(self) -> Dict[str, Any]:
-        """Get current answer key"""
-        if self._answer_key is None:
-            return {'success': False, 'message': 'No answer key loaded'}
-
-        return {
-            'success': True,
-            'answers': self._answer_key.answers,
-            'filled_count': self._answer_key.get_filled_count(),
-            'is_complete': self._answer_key.is_complete(),
-            'name': getattr(self._answer_key, 'name', '')
-        }
-
-    def load_saved_answer_key(self) -> Dict[str, Any]:
-        """
-        Load answer key that was saved from a previous session.
-
-        This is called on app startup to restore the last used answer key.
-        """
+    def import_school_codes_file(self) -> Dict[str, Any]:
+        """Pick an Excel file and merge its school codes into the list"""
         try:
-            saved_key = self._settings.get_saved_answer_key()
+            result = self._window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                directory=str(Path.home()),
+                file_types=('Excel Files (*.xlsx)',)
+            )
+            if not result:
+                return {'success': False, 'message': 'No file selected'}
 
-            if saved_key is None:
-                return {'success': False, 'message': 'No saved answer key found'}
-
-            self._answer_key = saved_key
-            self._scorer.set_answer_key(self._answer_key)
-            self._batch_processor.set_answer_key(self._answer_key)
-
-            return {
-                'success': True,
-                'name': getattr(self._answer_key, 'name', self._settings.saved_answer_key_name),
-                'filled_count': self._answer_key.get_filled_count(),
-                'is_complete': self._answer_key.is_complete(),
-                'answers': self._answer_key.answers
-            }
-
+            added, updated, skipped = self._schools.import_excel(result[0])
+            message = f'Imported: {added} added, {updated} updated'
+            if skipped:
+                message += f', {len(skipped)} rows skipped'
+            return {'success': True, 'message': message, 'skipped': skipped[:20],
+                    'schools': self._schools.list()}
         except Exception as e:
-            logger.error(f"Load saved answer key error: {e}")
-            return {'success': False, 'message': str(e)}
-
-    def clear_saved_answer_key(self) -> Dict[str, Any]:
-        """Clear the saved answer key from settings."""
-        try:
-            self._settings.clear_saved_answer_key()
-            self._answer_key = None
-            return {'success': True, 'message': 'Saved answer key cleared'}
-        except Exception as e:
-            logger.error(f"Clear answer key error: {e}")
+            logger.error(f"Import school codes error: {e}")
             return {'success': False, 'message': str(e)}
 
     # === Processing Operations ===

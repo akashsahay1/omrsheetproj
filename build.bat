@@ -6,7 +6,7 @@ echo Building VB OMR Scanner (Development Mode)...
 echo.
 
 REM Activate virtual environment
-call venv\Scripts\activate.bat
+call venv311\Scripts\activate.bat
 
 REM Build with PyInstaller (development mode - faster)
 pyinstaller build.spec --noconfirm

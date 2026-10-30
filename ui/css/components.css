@@ -340,7 +340,7 @@
 }
 
 .search-box::before {
-    content: "&#128269;";
+    content: "\1F50D";
     position: absolute;
     left: 15px;
     top: 50%;
@@ -412,4 +412,201 @@
         margin-left: 60px;
         padding: 20px;
     }
+}
+
+/* School Codes Page */
+#page-school-codes .page-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.school-form h3 {
+    margin-bottom: 15px;
+    color: var(--primary-dark);
+}
+
+.school-form-row {
+    display: flex;
+    gap: 20px;
+}
+
+.school-code-field {
+    flex: 0 0 160px;
+}
+
+.school-name-field {
+    flex: 1;
+}
+
+.school-form-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.school-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 15px;
+}
+
+.school-search {
+    flex: 1;
+    max-width: 420px;
+    margin-bottom: 0;
+}
+
+.school-search input {
+    padding-right: 40px;
+}
+
+.search-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-light);
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.search-clear:hover {
+    background: var(--border-color);
+    color: var(--text-color);
+}
+
+.search-clear.hidden {
+    display: none;
+}
+
+.school-count {
+    color: var(--text-light);
+    font-size: 0.9rem;
+}
+
+.school-table .col-code {
+    width: 110px;
+}
+
+.school-table .col-actions {
+    width: 170px;
+    text-align: right;
+}
+
+.school-table td.actions {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.school-table td.code {
+    font-weight: 600;
+}
+
+.btn-sm {
+    padding: 5px 12px;
+    font-size: 0.85rem;
+}
+
+.btn-sm + .btn-sm {
+    margin-left: 6px;
+}
+
+/* Answer Keys Page */
+#page-answer-key .page-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.ak-create h3 {
+    margin-bottom: 15px;
+    color: var(--primary-dark);
+}
+
+.ak-create .form-group input,
+.ak-name-field input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 1rem;
+    height: 42px;
+    box-sizing: border-box;
+}
+
+.ak-name-field {
+    max-width: 520px;
+}
+
+.ak-create-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.ak-table .col-filled {
+    width: 110px;
+}
+
+.ak-table .col-updated {
+    width: 170px;
+}
+
+.ak-table .col-actions {
+    width: 170px;
+    text-align: right;
+}
+
+.ak-table td.actions {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.ak-name {
+    font-weight: 600;
+}
+
+.ak-badge {
+    display: inline-block;
+    margin-left: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #d4edda;
+    color: #155724;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.ak-complete {
+    color: var(--success-color);
+    font-weight: 600;
+}
+
+.ak-incomplete {
+    color: #9c5700;
+    font-weight: 600;
+}
+
+.ak-unsaved {
+    margin-left: 10px;
+    color: #9c5700;
+    font-weight: 600;
+}
+
+.btn-link {
+    background: none;
+    border: none;
+    padding: 0;
+    margin-bottom: 6px;
+    color: var(--primary-color);
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.btn-link:hover {
+    text-decoration: underline;
 }

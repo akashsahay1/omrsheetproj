@@ -39,10 +39,13 @@ class Scorer:
         self.rules = rules or ScoringRules()
         self.answer_key: Optional[AnswerKey] = None
 
-    def set_answer_key(self, answer_key: AnswerKey) -> None:
-        """Set the answer key for evaluation"""
+    def set_answer_key(self, answer_key: Optional[AnswerKey]) -> None:
+        """Set the answer key for evaluation (None clears it)"""
         self.answer_key = answer_key
-        logger.info(f"Answer key set: {answer_key.get_filled_count()}/60 answers defined")
+        if answer_key is None:
+            logger.info("Answer key cleared")
+        else:
+            logger.info(f"Answer key set: {answer_key.get_filled_count()}/60 answers defined")
 
     def load_answer_key(self, file_path: str) -> bool:
         """
