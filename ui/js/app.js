@@ -508,9 +508,25 @@ function updateProgressUI(progress) {
     document.getElementById('progress-file').textContent = `Current: ${progress.current_file || '-'}`;
     document.getElementById('progress-count').textContent = `Processed: ${progress.current} / ${progress.total}`;
 
-    const elapsed = Math.round(progress.elapsed_seconds);
-    const remaining = progress.estimated_remaining > 0 ? Math.round(progress.estimated_remaining) : '-';
-    document.getElementById('progress-time').textContent = `Elapsed: ${elapsed}s | Remaining: ${remaining}s`;
+    const elapsed = formatDuration(progress.elapsed_seconds);
+    const remaining = progress.estimated_remaining > 0 ? formatDuration(progress.estimated_remaining) : '-';
+    document.getElementById('progress-time').textContent = `Elapsed: ${elapsed} | Remaining: ${remaining}`;
+}
+
+/**
+ * Format seconds as "1h 23m 45s", "4m 05s" or "12s"
+ * @param {number} totalSeconds
+ * @returns {string}
+ */
+function formatDuration(totalSeconds) {
+    const s = Math.max(0, Math.round(totalSeconds || 0));
+    const hours = Math.floor(s / 3600);
+    const minutes = Math.floor((s % 3600) / 60);
+    const seconds = s % 60;
+    const pad = n => String(n).padStart(2, '0');
+    if (hours > 0) return `${hours}h ${pad(minutes)}m ${pad(seconds)}s`;
+    if (minutes > 0) return `${minutes}m ${pad(seconds)}s`;
+    return `${seconds}s`;
 }
 
 // ==================== Results ====================

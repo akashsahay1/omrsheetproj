@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from .grid_detector import GridDetector, GridConfig, GRID_SEARCH_REGIONS
 from .bubble_detector import AdaptiveBubbleClassifier, create_adaptive_classifier
 from .dynamic_grid_detector import DynamicGridDetector
+from .layout_locator import LayoutLocator, SheetLayout
 
 
 @dataclass
@@ -169,9 +170,16 @@ class FieldExtractor:
         # Detect batch type from color image
         batch_type = 'khoj'  # Default
         if color_image is not None:
-            from ai.dynamic_grid_detector import DynamicGridDetector
             detector = DynamicGridDetector()
             batch_type = detector._detect_batch_type(color_image)
+
+        # Preferred path: locate the printed bubbles on this very sheet. This
+        # absorbs print-run / printer / scanner differences in scale, margins
+        # and row spacing. Falls back to calibrated coordinates if it fails.
+        if color_image is not None:
+            layout = LayoutLocator().locate(color_image)
+            if layout is not None:
+                return self._extract_with_layout(gray, layout)
 
         # Extract individual fields (pass batch_type to all)
         name_result = self.extract_name(gray, batch_type)
@@ -198,6 +206,126 @@ class FieldExtractor:
         result.answers = {int(q): ans for q, ans in answers_result.items() if ans}
         result.answers_confidence = self._calculate_answers_confidence(answers_result)
 
+        self._set_overall_confidence(result)
+        return result
+
+    # ------------------------------------------------------------------
+    # Layout-based extraction (bubble centres located on the sheet itself)
+    # ------------------------------------------------------------------
+
+    def _extract_with_layout(self, gray: np.ndarray, layout: SheetLayout) -> OMRExtractionResult:
+        """Extract every field by sampling the located bubble centres."""
+        result = OMRExtractionResult()
+
+        result.name, result.name_confidence = self._read_name(gray, layout.name)
+
+        result.roll_number, result.roll_confidence = self._read_digits(gray, layout.roll_number)
+        result.school_code, result.school_code_confidence = self._read_digits(gray, layout.school_code)
+
+        cls, result.class_confidence = self._read_column(
+            gray, layout.class_, FIELD_VALUES['class'])
+        result.class_ = cls.strip()
+        sec, result.section_confidence = self._read_column(
+            gray, layout.section, FIELD_VALUES['section'])
+        result.section = sec.strip()
+
+        answers = {str(q): '' for q in range(1, 61)}
+        for q in range(min(60, layout.answers.shape[0])):
+            darkness = [255 - self._box_mean(gray, x, y, 14) for x, y in layout.answers[q]]
+            answers[str(q + 1)] = self._pick_answer(darkness)
+        result.answers = {int(q): a for q, a in answers.items() if a}
+        result.answers_confidence = self._calculate_answers_confidence(answers)
+
+        self._set_overall_confidence(result)
+        return result
+
+    # A marked name bubble is >120 grey levels darker than its row baseline and
+    # an unmarked one <20 (measured on 2025-26 and 2026-27 Khoj/Chayan sheets).
+    NAME_FILL_DELTA = 50
+
+    def _read_name(self, gray: np.ndarray, grid: np.ndarray) -> Tuple[str, float]:
+        """
+        Read the name grid using row-normalised darkness.
+
+        Each row's baseline is its median darkness across all columns (most
+        columns are empty in any given row). Subtracting it cancels letter
+        glyph weight (bold M/W print darker than I/J) and print density
+        differences between print runs, so empty columns stay blank.
+        """
+        values = FIELD_VALUES['name']
+        means = np.array([[self._box_mean(gray, x, y, 12) for x, y in row] for row in grid])
+        delta = np.median(means, axis=1, keepdims=True) - means  # >0 = darker than usual
+
+        chars, confs = [], []
+        for col in range(delta.shape[1]):
+            filled = np.flatnonzero(delta[:, col] >= self.NAME_FILL_DELTA)
+            if len(filled):
+                # Multi-marked column: first (topmost) filled bubble wins
+                row = int(filled[0])
+                chars.append(values[row])
+                confs.append(min(1.0, delta[row, col] / 120.0))
+            else:
+                chars.append(' ')
+        name = self._clean_name(''.join(chars))
+        return name, (float(np.mean(confs)) if confs else 0.0)
+
+    def _read_digits(self, gray: np.ndarray, grid: np.ndarray) -> Tuple[str, float]:
+        """Read a multi-column digit field (rows 0-9)."""
+        digits, confs = [], []
+        for col in range(grid.shape[1]):
+            d, conf = self._read_column(gray, grid[:, col], FIELD_VALUES['roll_number'])
+            if d.strip():
+                digits.append(d)
+                confs.append(conf)
+        return ''.join(digits), (float(np.mean(confs)) if confs else 0.0)
+
+    def _read_column(self, gray: np.ndarray, centres: np.ndarray, values: List[str]) -> Tuple[str, float]:
+        """
+        Decide which bubble in a single column (class, section, one digit) is marked.
+
+        A bubble is marked when it is NAME_FILL_DELTA darker than the column
+        median. Relative darkness cancels printed glyph weight (e.g. the
+        two-digit "10" prints darker than "3") and print/scan density. If
+        several are marked, the first (topmost) wins, as for the name.
+        """
+        if len(centres) == 0:
+            return ('', 0.0)
+        means = np.array([self._box_mean(gray, x, y, 12) for x, y in centres])
+        delta = np.median(means) - means
+        filled = np.flatnonzero(delta >= self.NAME_FILL_DELTA)
+        if len(filled):
+            row = int(filled[0])
+            return (values[row], min(1.0, delta[row] / 120.0))
+        return ('', 0.0)
+
+    @staticmethod
+    def _pick_answer(darkness: List[float]) -> str:
+        """3-tier threshold on bubble darkness (same rules as calibrated path)."""
+        if not darkness:
+            return ''
+        best = max(darkness)
+        idx = darkness.index(best)
+        ordered = sorted(darkness, reverse=True)
+        gap = ordered[0] - ordered[1] if len(ordered) > 1 else best
+        if best >= 150 or (best >= 100 and gap >= 40) or (best >= 40 and gap >= 20):
+            return FIELD_VALUES['answers'][idx]
+        return ''
+
+    @staticmethod
+    def _crop(gray: np.ndarray, x: float, y: float, half: int) -> np.ndarray:
+        h, w = gray.shape[:2]
+        x, y = int(round(x)), int(round(y))
+        x1, y1, x2, y2 = max(0, x - half), max(0, y - half), min(w, x + half), min(h, y + half)
+        if x2 <= x1 or y2 <= y1:
+            return np.full((2 * half, 2 * half), 255, dtype=np.uint8)
+        return gray[y1:y2, x1:x2]
+
+    @classmethod
+    def _box_mean(cls, gray: np.ndarray, x: float, y: float, half: int) -> float:
+        return float(np.mean(cls._crop(gray, x, y, half)))
+
+    @staticmethod
+    def _set_overall_confidence(result: OMRExtractionResult) -> None:
         # Calculate overall confidence (0-100 scale)
         # Note: Individual field confidences from ML classifier are 0-1
         # answers_confidence is already 0-100 after our fix
@@ -211,8 +339,6 @@ class FieldExtractor:
         ]
         valid_confs = [c for c in confidences if c > 0]
         result.overall_confidence = np.mean(valid_confs) if valid_confs else 0.0
-
-        return result
 
     def extract_name(self, gray: np.ndarray, batch_type: str = 'khoj') -> ExtractionResult:
         """

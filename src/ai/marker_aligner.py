@@ -140,6 +140,20 @@ class MarkerAligner:
             # Perform perspective transform to canonical positions
             aligned = self._perspective_transform(image, ordered_corners)
 
+            # Fallback detectors (page contour / Harris) can lock onto a printed
+            # box instead of the markers; don't claim success for those.
+            tl, tr, bl, br = ordered_corners
+            if not self._is_rectangular(tl, tr, bl, br):
+                return AlignmentResult(
+                    success=False,
+                    aligned_image=aligned,
+                    corners_detected=4,
+                    confidence=0.3,
+                    error_message="Detected corners do not form a rectangle",
+                    markers=ordered_corners,
+                    original_size=original_size
+                )
+
             return AlignmentResult(
                 success=True,
                 aligned_image=aligned,
@@ -174,11 +188,16 @@ class MarkerAligner:
             binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
 
+        # Area limits are tuned for ~1650px-wide scans; scale for other DPIs
+        area_scale = (gray.shape[1] / 1656.0) ** 2
+        min_area = self.min_marker_area * area_scale
+        max_area = self.max_marker_area * area_scale
+
         # Filter contours by area and shape
         marker_candidates = []
         for contour in contours:
             area = cv2.contourArea(contour)
-            if self.min_marker_area < area < self.max_marker_area:
+            if min_area < area < max_area:
                 # Check if roughly square or circular
                 perimeter = cv2.arcLength(contour, True)
                 circularity = 4 * np.pi * area / (perimeter * perimeter) if perimeter > 0 else 0
@@ -208,9 +227,11 @@ class MarkerAligner:
             (0, h)            # Bottom-left
         ]
 
-        # Typical marker area range (Vidya Bharti forms have markers ~500-700 pixels)
-        TYPICAL_AREA_MIN = 400
-        TYPICAL_AREA_MAX = 1500
+        # Typical marker area range (Vidya Bharti forms have markers ~500-700 pixels
+        # at ~1650px width). Scale with image width so other scan DPIs work too.
+        area_scale = (w / 1656.0) ** 2
+        TYPICAL_AREA_MIN = 400 * area_scale
+        TYPICAL_AREA_MAX = 1500 * area_scale
 
         for corner_x, corner_y in corner_regions:
             best_marker = None
@@ -275,14 +296,43 @@ class MarkerAligner:
         if bl[0] > w * 0.15 or bl[1] < h * 0.75:
             return False
 
-        # Check 5: Width and height should be reasonable (at least 80% of image)
+        # Check 5: Width and height should be reasonable. Scanners/printers vary
+        # the margins and page scale throughout the year (e.g. markers span 73%
+        # of the height on one batch and 69% on another), so keep this loose and
+        # rely on the geometric checks below instead.
         width = np.sqrt((tr[0] - tl[0])**2 + (tr[1] - tl[1])**2)
         height = np.sqrt((bl[0] - tl[0])**2 + (bl[1] - tl[1])**2)
 
-        if width < w * 0.8 or height < h * 0.7:
+        if width < w * 0.6 or height < h * 0.5:
             return False
 
-        return True
+        return self._is_rectangular(tl, tr, bl, br)
+
+    @staticmethod
+    def _is_rectangular(tl, tr, bl, br) -> bool:
+        """Check that four marker points form a near-rectangle of plausible aspect."""
+        top = np.linalg.norm(tr - tl)
+        bottom = np.linalg.norm(br - bl)
+        left = np.linalg.norm(bl - tl)
+        right = np.linalg.norm(br - tr)
+        if min(top, bottom, left, right) <= 0:
+            return False
+
+        # Opposite sides should match within 5%
+        if abs(top - bottom) / max(top, bottom) > 0.05:
+            return False
+        if abs(left - right) / max(left, right) > 0.05:
+            return False
+
+        # Diagonals should match within 5% (rules out parallelograms)
+        d1 = np.linalg.norm(br - tl)
+        d2 = np.linalg.norm(bl - tr)
+        if abs(d1 - d2) / max(d1, d2) > 0.05:
+            return False
+
+        # Marker box on Vidya Bharti sheets is portrait, width/height ~0.85-0.95
+        aspect = (top + bottom) / (left + right)
+        return 0.7 < aspect < 1.1
 
     def _estimate_missing_corners(self, corners: List[Tuple[int, int]], w: int, h: int) -> List[Tuple[int, int]]:
         """Estimate missing corners from detected ones, assuming rectangular form."""

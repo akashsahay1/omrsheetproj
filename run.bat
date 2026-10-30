@@ -6,7 +6,7 @@ REM Change to script directory
 cd /d "%~dp0"
 
 REM Check if venv exists
-if not exist "venv\Scripts\python.exe" (
+if not exist "venv311\Scripts\python.exe" (
     echo ERROR: Virtual environment not found!
     echo Please run setup.bat first.
     pause
@@ -14,7 +14,7 @@ if not exist "venv\Scripts\python.exe" (
 )
 
 REM Run the application
-venv\Scripts\python.exe src\main.py
+venv311\Scripts\python.exe src\main.py
 
 if errorlevel 1 (
     echo.
