@@ -7,7 +7,7 @@ from typing import List
 # Application Info
 APP_NAME = "Vidya Bharti Pratibha Khoj and Pratibha Chayan OMR Scanner"
 APP_SHORT_NAME = "VB OMR Scanner"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 APP_TITLE = "Vidya Bharti Pratibha Khoj and Pratibha Chayan OMR Scanner"
 
 # Supported Image Formats

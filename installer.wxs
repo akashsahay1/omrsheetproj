@@ -3,7 +3,7 @@
     <Product Id="*"
              Name="VB OMR Scanner"
              Language="1033"
-             Version="1.0.0"
+             Version="1.0.1"
              Manufacturer="Vidya Bharti"
              UpgradeCode="B8E9F5A2-3C4D-4E5F-A6B7-8C9D0E1F2A3B">
 

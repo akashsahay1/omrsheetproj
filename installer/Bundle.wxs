@@ -13,7 +13,7 @@
     -->
 
     <Bundle Name="VB OMR Scanner"
-            Version="1.0.0.0"
+            Version="1.0.1.0"
             Manufacturer="Vidya Bharti"
             UpgradeCode="E7F8A9B0-C1D2-3E4F-5A6B-7C8D9E0F1A2B"
             IconSourceFile="..\assets\icon.ico"

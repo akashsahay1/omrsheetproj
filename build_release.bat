@@ -33,11 +33,11 @@ REM Create MSI using create_msi.py script
 echo Creating MSI installer...
 python create_msi.py
 
-if exist "dist\VBOMRScanner-1.0.0-win64.msi" (
+if exist "dist\VBOMRScanner-1.0.1-win64.msi" (
     echo.
     echo ============================================
     echo SUCCESS\! Installer created:
-    echo dist\VBOMRScanner-1.0.0-win64.msi
+    echo dist\VBOMRScanner-1.0.1-win64.msi
     echo ============================================
     echo.
 ) else (

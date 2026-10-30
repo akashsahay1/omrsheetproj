@@ -1,6 +1,6 @@
 ================================================================================
     VIDYA BHARTI PRATIBHA KHOJ AND PRATIBHA CHAYAN OMR SCANNER
-                        VERSION 1.0.0
+                        VERSION 1.0.1
 ================================================================================
 
                         USER & BUILD DOCUMENTATION
@@ -435,7 +435,7 @@ When reporting issues, please include:
 
 Document Version: 1.0
 Last Updated: December 2025
-Application: Vidya Bharti Pratibha Khoj and Pratibha Chayan OMR Scanner v1.0.0
+Application: Vidya Bharti Pratibha Khoj and Pratibha Chayan OMR Scanner v1.0.1
 
 Developed by: Avenux Techspire (OPC) PVT LTD
 

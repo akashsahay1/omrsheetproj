@@ -2,7 +2,7 @@
 ; Creates a professional Windows installer
 
 #define MyAppName "VB OMR Scanner"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "Vidya Bharti"
 #define MyAppURL "https://vidyabharti.net"
 #define MyAppExeName "VB OMR Scanner.exe"

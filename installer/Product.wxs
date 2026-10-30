@@ -8,7 +8,7 @@
     <Product Id="*"
              Name="Vidya Bharti OMR Scanner"
              Language="1033"
-             Version="1.0.0.0"
+             Version="1.0.1.0"
              Manufacturer="Vidya Bharti"
              UpgradeCode="A5D8E7B9-C4F2-4A1B-8D3E-6F9A2B1C0D5E">
 

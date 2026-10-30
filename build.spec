@@ -11,7 +11,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules, coll
 # Application metadata
 APP_NAME = "Vidya Bharti Pratibha Khoj and Pratibha Chayan OMR Scanner"
 APP_SHORT_NAME = "VB OMR Scanner"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 BUNDLE_ID = "com.vidyabharti.omrprocessor"
 
 # Paths
