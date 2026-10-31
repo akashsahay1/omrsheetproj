@@ -14,6 +14,8 @@ Key improvement: Uses canonical marker positions specific to Vidya Bharti OMR sh
 so all aligned images have markers at identical positions regardless of original dimensions.
 """
 
+import itertools
+
 import cv2
 import numpy as np
 from typing import Optional, Tuple, List
@@ -56,6 +58,9 @@ class MarkerAligner:
         [170, 3150],   # Bottom-left marker center
         [2310, 3150]   # Bottom-right marker center
     ])
+
+    # Candidates kept per corner when searching for a valid marker rectangle
+    CANDIDATES_PER_CORNER = 4
 
     def __init__(
         self,
@@ -233,10 +238,12 @@ class MarkerAligner:
         TYPICAL_AREA_MIN = 400 * area_scale
         TYPICAL_AREA_MAX = 1500 * area_scale
 
+        # Keep the best few candidates per corner, not just the closest: a round
+        # blob of a school stamp near a corner can sit closer to the page corner
+        # than the real marker.
+        per_corner = []
         for corner_x, corner_y in corner_regions:
-            best_marker = None
-            best_score = float('inf')
-
+            scored = []
             for mx, my, area in marker_candidates:
                 dist = np.sqrt((mx - corner_x)**2 + (my - corner_y)**2)
                 # Strict corner region: within 20% of image dimension
@@ -248,22 +255,25 @@ class MarkerAligner:
                     else:
                         # Large penalty for markers outside typical range
                         area_penalty = abs(area - (TYPICAL_AREA_MIN + TYPICAL_AREA_MAX) / 2) * 0.5
+                    scored.append((dist + area_penalty, (mx, my)))
+            scored.sort(key=lambda s: s[0])
+            per_corner.append(scored[:self.CANDIDATES_PER_CORNER])
 
-                    score = dist + area_penalty
-                    if score < best_score:
-                        best_score = score
-                        best_marker = (mx, my)
+        if not all(per_corner):
+            # Some corner has no candidate: return what we have so the caller
+            # can estimate the missing corner from the other three
+            return [c[0][1] for c in per_corner if c]
 
-            if best_marker:
-                corners.append(best_marker)
+        # Try combinations best-score first; use the first one that forms a
+        # proper page rectangle (a stamp blob won't line up with the others)
+        combos = sorted(itertools.product(*per_corner), key=lambda combo: sum(s for s, _ in combo))
+        for combo in combos:
+            corners = [pt for _, pt in combo]
+            if self._validate_corners(corners, w, h):
+                return corners
 
-        # Validate corners form a proper quadrilateral
-        if len(corners) == 4:
-            if not self._validate_corners(corners, w, h):
-                # Invalid corners, return empty to trigger fallback
-                return []
-
-        return corners
+        # No valid rectangle: return empty to trigger fallback
+        return []
 
     def _validate_corners(self, corners: List[Tuple[int, int]], w: int, h: int) -> bool:
         """Validate that detected corners form a reasonable quadrilateral."""

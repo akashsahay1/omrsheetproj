@@ -242,6 +242,23 @@ class FieldExtractor:
     # A marked name bubble is >120 grey levels darker than its row baseline and
     # an unmarked one <20 (measured on 2025-26 and 2026-27 Khoj/Chayan sheets).
     NAME_FILL_DELTA = 50
+    # A stray/partial mark next to a real fill (e.g. 82 vs 205 on 13679A) must
+    # not win just because it is higher up: only bubbles at least this fraction
+    # as dark as the darkest bubble in the column count as filled.
+    FULL_FILL_RATIO = 0.6
+
+    @classmethod
+    def _pick_marked(cls, delta: np.ndarray) -> Optional[int]:
+        """
+        Row of the marked bubble in a column of darkness-above-baseline values,
+        or None. Faint marks are ignored when a clearly darker fill exists;
+        among comparably filled bubbles the first (topmost) wins.
+        """
+        strongest = float(np.max(delta)) if len(delta) else 0.0
+        if strongest < cls.NAME_FILL_DELTA:
+            return None
+        threshold = max(cls.NAME_FILL_DELTA, cls.FULL_FILL_RATIO * strongest)
+        return int(np.flatnonzero(delta >= threshold)[0])
 
     def _read_name(self, gray: np.ndarray, grid: np.ndarray) -> Tuple[str, float]:
         """
@@ -258,10 +275,8 @@ class FieldExtractor:
 
         chars, confs = [], []
         for col in range(delta.shape[1]):
-            filled = np.flatnonzero(delta[:, col] >= self.NAME_FILL_DELTA)
-            if len(filled):
-                # Multi-marked column: first (topmost) filled bubble wins
-                row = int(filled[0])
+            row = self._pick_marked(delta[:, col])
+            if row is not None:
                 chars.append(values[row])
                 confs.append(min(1.0, delta[row, col] / 120.0))
             else:
@@ -285,16 +300,16 @@ class FieldExtractor:
 
         A bubble is marked when it is NAME_FILL_DELTA darker than the column
         median. Relative darkness cancels printed glyph weight (e.g. the
-        two-digit "10" prints darker than "3") and print/scan density. If
-        several are marked, the first (topmost) wins, as for the name.
+        two-digit "10" prints darker than "3") and print/scan density. Faint
+        stray marks are ignored next to a real fill; if several are fully
+        marked, the first (topmost) wins, as for the name.
         """
         if len(centres) == 0:
             return ('', 0.0)
         means = np.array([self._box_mean(gray, x, y, 12) for x, y in centres])
         delta = np.median(means) - means
-        filled = np.flatnonzero(delta >= self.NAME_FILL_DELTA)
-        if len(filled):
-            row = int(filled[0])
+        row = self._pick_marked(delta)
+        if row is not None:
             return (values[row], min(1.0, delta[row] / 120.0))
         return ('', 0.0)
 
